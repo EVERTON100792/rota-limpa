@@ -63,7 +63,7 @@ const App: React.FC = () => {
   const toggleSidebar = () => setIsSidebarOpen(prev => !prev);
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-gray-100 relative">
+    <div className="flex h-[100dvh] w-screen overflow-hidden bg-gray-100 relative">
 
       {/* Botão Flutuante do Menu (Apenas Mobile/Quando fechado) */}
       <button

@@ -9,8 +9,9 @@ export const searchLocation = async (query: string): Promise<Location[]> => {
     // Increased limit to 10 to provide more "Did you mean?" options for the user
     // addressdetails=1 is crucial for parsing the "Better Name"
     // Use /api/nominatim proxy to allow CORS
+    // added &countrycodes=br to restrict results to Brazil
     const response = await fetch(
-      `/api/nominatim/search?format=json&q=${encodeURIComponent(query)}&limit=10&addressdetails=1`
+      `/api/nominatim/search?format=json&q=${encodeURIComponent(query)}&limit=10&addressdetails=1&countrycodes=br`
     );
     const data = await response.json();
 
@@ -28,20 +29,18 @@ export const searchLocation = async (query: string): Promise<Location[]> => {
       const state = addr.state || "";
       const postcode = addr.postcode || "";
 
-      // Logic to create a "Better Name" than just the raw display_name
-      // If we have a street, use "Street, Number" as the main name
+      // Logic to create a "Better Name"
+      // Priority: Specific Name (Company/POI) > Street + Number > Street
       let mainName = item.name;
 
-      if (!mainName || mainName === number || (street && mainName.indexOf(street) === -1)) {
+      if (!mainName) {
+        // Fallback if no specific name exists
         if (street) {
           mainName = `${street}${number ? ', ' + number : ''}`;
         } else if (city) {
           mainName = city;
-        }
-      } else {
-        // If name exists (e.g., "Shopping Center X"), append number if available and not present
-        if (number && mainName.indexOf(number) === -1) {
-          mainName += `, ${number}`;
+        } else {
+          mainName = item.display_name.split(',')[0]; // Usage of first part of display name as last resort
         }
       }
 
@@ -266,7 +265,8 @@ export const getOptimizedRoute = async (
       const north = bounds.maxLat + 0.05;
       const east = bounds.maxLng + 0.05;
 
-      // Query for toll booths
+      // Query for toll booths AND attempt to get city context via is_in (complex but better)
+      // or simply fetch the node/way details
       const overpassQuery = `[out:json][timeout:5];
             (
               node["barrier"="toll_booth"](${south},${west},${north},${east});
@@ -331,19 +331,22 @@ export const getOptimizedRoute = async (
 
     tollDetails.forEach(toll => {
       let closestDist = Infinity;
-      let closestName = "";
+      let closestCity = "";
 
       validWaypoints.forEach(wp => {
         const d = calculateDistance(toll.lat, toll.lng, wp.lat, wp.lng);
         if (d < closestDist) {
           closestDist = d;
           // Use city if available, otherwise name
-          closestName = wp.address?.city || wp.name.split(',')[0];
+          closestCity = wp.address?.city || wp.address?.town || wp.address?.municipality || "";
         }
       });
 
-      if (closestName) {
-        toll.nearbyLocation = `Aprox. ${Math.round(closestDist)}km de ${closestName}`;
+      if (closestCity) {
+        toll.nearbyLocation = `Próximo a ${closestCity}`;
+      } else {
+        // Fallback if no city found in waypoints
+        toll.nearbyLocation = `Aprox. ${Math.round(closestDist)}km do ponto de parada`;
       }
     });
 

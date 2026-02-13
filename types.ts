@@ -8,6 +8,11 @@ export interface Location {
     street?: string;
     number?: string;
     city?: string;
+    town?: string;
+    village?: string;
+    municipality?: string;
+    suburb?: string;
+    neighbourhood?: string;
     state?: string;
     postcode?: string;
   };
