@@ -9,7 +9,9 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-  <style>
+    /* Fonts */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap');
+
     html,
     body,
     #root {
@@ -17,45 +19,93 @@
       margin: 0;
       padding: 0;
       overflow: hidden;
+      font-family: 'Inter', sans-serif;
+      background-color: #f8fafc; /* Slate-50 */
     }
 
-    /* Custom scrollbar for webkit */
+    h1, h2, h3, h4, h5, h6, .font-heading {
+      font-family: 'Outfit', sans-serif;
+    }
+
+    /* Custom scrollbar */
     ::-webkit-scrollbar {
-      width: 8px;
-      height: 8px;
+      width: 6px;
+      height: 6px;
     }
 
     ::-webkit-scrollbar-track {
-      background: #f1f1f1;
+      background: transparent;
     }
 
     ::-webkit-scrollbar-thumb {
-      background: #888;
-      border-radius: 4px;
+      background: #cbd5e1;
+      border-radius: 10px;
     }
 
     ::-webkit-scrollbar-thumb:hover {
-      background: #555;
+      background: #94a3b8;
     }
 
     .leaflet-container {
       width: 100%;
       height: 100%;
       z-index: 0;
+      font-family: 'Inter', sans-serif;
     }
 
+    /* Animations */
     .animate-in {
-      animation: fadeIn 0.3s ease-in-out;
+      animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
     }
 
     @keyframes fadeIn {
-      from {
-        opacity: 0;
-      }
+      from { opacity: 0; transform: translateY(5px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
 
-      to {
-        opacity: 1;
-      }
+    /* Radar / Scanner Animation */
+    .radar-spinner {
+      position: relative;
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      border: 2px solid rgba(16, 185, 129, 0.3); /* Emerald-500 low opacity */
+    }
+
+    .radar-spinner::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      border-top: 2px solid #10b981; /* Emerald-500 */
+      animation: spin 1.5s linear infinite;
+      box-shadow: 0 0 15px rgba(16, 185, 129, 0.5);
+    }
+    
+    .radar-pulse {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 10px;
+        height: 10px;
+        background: #10b981;
+        border-radius: 50%;
+        animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    @keyframes pulse-ring {
+        0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
+        50% { opacity: 1; }
+        100% { transform: translate(-50%, -50%) scale(4); opacity: 0; }
     }
   </style>
 

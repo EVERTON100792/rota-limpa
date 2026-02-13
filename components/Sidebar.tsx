@@ -264,10 +264,11 @@ const Sidebar: React.FC<SidebarProps> = ({
             </div>
 
             {/* Manual Add Button (visible when query exists) */}
+            {/* Manual Add Button (visible when query exists) */}
             {query.length > 3 && (
               <button
                 onClick={handleManualAdd}
-                className="absolute right-10 top-3 text-emerald-600 hover:text-emerald-800 font-bold text-sm bg-white px-2"
+                className="absolute right-3 top-2.5 text-emerald-600 hover:text-emerald-800 font-bold text-xs bg-emerald-50 px-2 py-1 rounded-md transition-colors"
               >
                 ADICIONAR
               </button>
@@ -343,33 +344,43 @@ const Sidebar: React.FC<SidebarProps> = ({
               <p className="text-gray-400 text-xs">Adicione endereços completos com número.</p>
             </div>
           ) : (
-            <ul className="space-y-2 relative">
-              {/* Show connector line behind items */}
-              {locations.length > 1 && (
-                <div className="absolute left-[1.65rem] top-4 bottom-4 w-0.5 bg-gray-300 -z-0"></div>
-              )}
+            <ul className="space-y-3 relative p-1 custom-scrollbar pb-20">
+              {locations.map((loc, index) => (
+                <div
+                  key={index}
+                  className="group bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-all duration-200 p-3 flex items-start justify-between relative overflow-hidden"
+                >
+                  {/* Connector Line (if not last) */}
+                  {index !== locations.length - 1 && (
+                    <div className="absolute left-[19px] top-[40px] bottom-[-20px] w-[2px] bg-gray-100 z-0 group-hover:bg-emerald-100 transition-colors"></div>
+                  )}
 
-              {(route ? route.waypoints : locations).map((loc, idx) => (
-                <li key={idx} className={`relative p-3 rounded-md flex justify-between items-center shadow-sm z-10 ${idx === 0 ? 'bg-blue-50 border border-blue-200' : 'bg-white border border-gray-200'}`}>
-                  <div className="flex items-center gap-3 overflow-hidden">
-                    <span className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold shrink-0 ${idx === 0 ? 'bg-blue-600 text-white' : 'bg-emerald-100 text-emerald-700'}`}>
-                      {idx + 1}
-                    </span>
-                    <div className="flex flex-col overflow-hidden">
-                      <span className="truncate text-sm font-medium text-gray-800">{loc.name}</span>
-                      {/* Display City context for stops */}
-                      {loc.address?.city && (
-                        <span className="text-[10px] text-gray-500 truncate">{loc.address.city}, {loc.address.state}</span>
-                      )}
-                      {idx === 0 && <span className="text-[10px] text-blue-600 font-bold uppercase tracking-wider mt-0.5">Partida</span>}
+                  <div className="flex items-start gap-3 relative z-10 w-full">
+                    <div className={`mt-0.5 w-8 h-8 rounded-full flex items-center justify-center shrink-0 border shadow-sm ${index === 0 ? 'bg-emerald-100 border-emerald-200 text-emerald-700' :
+                      index === locations.length - 1 ? 'bg-slate-800 border-slate-700 text-white' :
+                        'bg-white border-gray-200 text-gray-500'
+                      }`}>
+                      <span className="text-xs font-bold font-heading">{index + 1}</span>
                     </div>
-                  </div>
-                  {!route && (
-                    <button onClick={() => removeLocation(idx)} className="text-gray-400 hover:text-red-500">
+
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-gray-800 truncate leading-tight mb-0.5">
+                        {loc.name.split(',')[0]}
+                      </p>
+                      <p className="text-[11px] text-gray-500 truncate">
+                        {loc.address?.city || loc.address?.street || "Endereço desconhecido"}
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={() => removeLocation(index)}
+                      className="text-gray-300 hover:text-red-500 hover:bg-red-50 p-1.5 rounded-lg transition-colors"
+                      title="Remover"
+                    >
                       <Trash2 size={16} />
                     </button>
-                  )}
-                </li>
+                  </div>
+                </div>
               ))}
             </ul>
           )}
@@ -555,114 +566,118 @@ const Sidebar: React.FC<SidebarProps> = ({
             )}
           </div>
         )}
-      </div>
 
-      {/* Footer / Actions */}
-      <div className="p-4 bg-gray-50 border-t border-gray-200 shrink-0">
-        {!route ? (
-          <div className="space-y-3">
-            {/* Options */}
-            {/* Options */}
-            <div className={`flex items-center justify-between p-3 rounded-lg border ${!isPremium ? 'bg-gray-100 border-gray-200 opacity-75 relative overflow-hidden' : 'bg-gray-50 border-gray-200'}`}>
-              <div className="flex items-center gap-2">
-                <div className={`p-1.5 rounded-full ${avoidDirt ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-500'}`}>
-                  <div className="h-4 w-4 flex items-center justify-center font-bold text-xs">
-                    {avoidDirt ? <Check size={12} /> : <X size={12} />}
+        {/* Footer / Actions */}
+        <div className="p-4 bg-gray-50 border-t border-gray-200 shrink-0">
+          {!route ? (
+            <div className="space-y-3">
+              {/* Options */}
+              {/* Options */}
+              <div className={`flex items-center justify-between p-3 rounded-lg border ${!isPremium ? 'bg-gray-100 border-gray-200 opacity-75 relative overflow-hidden' : 'bg-gray-50 border-gray-200'}`}>
+                <div className="flex items-center gap-2">
+                  <div className={`p-1.5 rounded-full ${avoidDirt ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-500'}`}>
+                    <div className="h-4 w-4 flex items-center justify-center font-bold text-xs">
+                      {avoidDirt ? <Check size={12} /> : <X size={12} />}
+                    </div>
+                  </div>
+                  <div className="flex flex-col">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-gray-700">Evitar Estrada de Terra</span>
+                      {!isPremium && <span className="bg-gray-900 text-white text-[9px] px-1.5 py-0.5 rounded uppercase font-bold flex items-center gap-0.5"><Star size={8} /> PRO</span>}
+                    </div>
+                    <span className="text-[10px] text-gray-400 leading-tight">
+                      {!isPremium ? "Desvie de buracos e atoleiros." : "Priorizar asfalto (pode aumentar a distância)"}
+                    </span>
                   </div>
                 </div>
-                <div className="flex flex-col">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-gray-700">Evitar Estrada de Terra</span>
-                    {!isPremium && <span className="bg-gray-900 text-white text-[9px] px-1.5 py-0.5 rounded uppercase font-bold flex items-center gap-0.5"><Star size={8} /> PRO</span>}
-                  </div>
-                  <span className="text-[10px] text-gray-400 leading-tight">
-                    {!isPremium ? "Desvie de buracos e atoleiros." : "Priorizar asfalto (pode aumentar a distância)"}
-                  </span>
-                </div>
-              </div>
-              <button
-                onClick={() => {
-                  if (isPremium) {
-                    onToggleAvoidDirt();
-                  } else {
-                    onUpgradeClick();
-                  }
-                }}
-                disabled={!isPremium && false} // Keep clickable to trigger upgrade modal
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 ${avoidDirt ? 'bg-emerald-600' : 'bg-gray-300'} ${!isPremium ? 'cursor-pointer' : ''}`}
-              >
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${avoidDirt ? 'translate-x-6' : 'translate-x-1'}`} />
-              </button>
-            </div>
-
-            {/* Round Trip Option */}
-            <div className="flex items-center justify-between bg-gray-50 p-3 rounded-lg border border-gray-200">
-              <div className="flex items-center gap-2">
-                <div className={`p-1.5 rounded-full ${roundTrip ? 'bg-blue-100 text-blue-700' : 'bg-gray-200 text-gray-500'}`}>
-                  <div className="h-4 w-4 flex items-center justify-center font-bold text-xs">
-                    {roundTrip ? <Navigation size={12} className="rotate-180" /> : <X size={12} />}
-                  </div>
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-sm font-medium text-gray-700">Ida e Volta</span>
-                  <span className="text-[10px] text-gray-400 leading-tight">Retornar ao início</span>
-                </div>
-              </div>
-              <button
-                onClick={onToggleRoundTrip}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${roundTrip ? 'bg-blue-600' : 'bg-gray-300'}`}
-              >
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${roundTrip ? 'translate-x-6' : 'translate-x-1'}`} />
-              </button>
-            </div>
-
-            <button
-              onClick={onOptimize}
-              disabled={locations.length < 2 || isOptimizing}
-              className={`w-full py-3 rounded-lg text-white font-bold text-lg shadow-lg flex justify-center items-center gap-2 transition-all ${locations.length < 2
-                ? 'bg-gray-400 cursor-not-allowed'
-                : 'bg-emerald-600 hover:bg-emerald-700 active:transform active:scale-95'
-                }`}
-            >
-              {isOptimizing ? (
-                <span className="animate-pulse">Calculando...</span>
-              ) : (
-                <>
-                  <Navigation size={20} /> Otimizar Rota
-                </>
-              )}
-            </button>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-3">
-            <div className="text-center">
-              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">Iniciar Navegação GPS</span>
-              <div className="grid grid-cols-2 gap-3">
                 <button
-                  onClick={() => openExternalGPS('google')}
-                  className="py-3 px-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-md flex justify-center items-center gap-2 active:transform active:scale-95"
+                  onClick={() => {
+                    if (isPremium) {
+                      onToggleAvoidDirt();
+                    } else {
+                      onUpgradeClick();
+                    }
+                  }}
+                  disabled={!isPremium && false} // Keep clickable to trigger upgrade modal
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 ${avoidDirt ? 'bg-emerald-600' : 'bg-gray-300'} ${!isPremium ? 'cursor-pointer' : ''}`}
                 >
-                  <MapIcon size={18} /> Google Maps
-                </button>
-                <button
-                  onClick={() => openExternalGPS('waze')}
-                  className="py-3 px-2 rounded-lg bg-cyan-400 hover:bg-cyan-500 text-white font-bold text-sm shadow-md flex justify-center items-center gap-2 active:transform active:scale-95"
-                >
-                  <ExternalLink size={18} /> Waze
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${avoidDirt ? 'translate-x-6' : 'translate-x-1'}`} />
                 </button>
               </div>
-            </div>
 
-            <button
-              onClick={() => setLocations([])} // Reset
-              className="w-full py-2 rounded-lg bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 text-sm font-medium mt-2"
-            >
-              Nova Rota
-            </button>
-          </div>
-        )}
+              {/* Round Trip Option */}
+              <div className="flex items-center justify-between bg-gray-50 p-3 rounded-lg border border-gray-200">
+                <div className="flex items-center gap-2">
+                  <div className={`p-1.5 rounded-full ${roundTrip ? 'bg-blue-100 text-blue-700' : 'bg-gray-200 text-gray-500'}`}>
+                    <div className="h-4 w-4 flex items-center justify-center font-bold text-xs">
+                      {roundTrip ? <Navigation size={12} className="rotate-180" /> : <X size={12} />}
+                    </div>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-sm font-medium text-gray-700">Ida e Volta</span>
+                    <span className="text-[10px] text-gray-400 leading-tight">Retornar ao início</span>
+                  </div>
+                </div>
+                <button
+                  onClick={onToggleRoundTrip}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${roundTrip ? 'bg-blue-600' : 'bg-gray-300'}`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${roundTrip ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+              </div>
+
+              {/* Premium Action Button */}
+              <div className="pt-2">
+                <button
+                  onClick={onOptimize}
+                  className="relative w-full group overflow-hidden rounded-xl shadow-lg shadow-emerald-500/20 transition-all duration-300 hover:shadow-emerald-500/40 hover:-translate-y-0.5 active:translate-y-0"
+                >
+                  <div className="absolute inset-0 bg-gradient-to-r from-emerald-600 to-teal-500 transition-all duration-300 group-hover:scale-105"></div>
+                  <div className="absolute inset-0 bg-white/0 group-hover:bg-white/10 transition-colors"></div>
+
+                  <div className="relative relative flex items-center justify-center gap-3 py-4">
+                    <span className="font-heading font-bold text-white tracking-wide text-lg">OTIMIZAR ROTA</span>
+                    <div className="bg-white/20 p-1.5 rounded-full">
+                      <Navigation size={18} className="text-white fill-current" />
+                    </div>
+                  </div>
+                </button>
+                <p className="text-center text-[10px] text-gray-400 mt-2 font-medium">
+                  IA de Roteamento Ativa • OSRM v5.24
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              <div className="text-center">
+                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">Iniciar Navegação GPS</span>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => openExternalGPS('google')}
+                    className="py-3 px-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-md flex justify-center items-center gap-2 active:transform active:scale-95"
+                  >
+                    <MapIcon size={18} /> Google Maps
+                  </button>
+                  <button
+                    onClick={() => openExternalGPS('waze')}
+                    className="py-3 px-2 rounded-lg bg-cyan-400 hover:bg-cyan-500 text-white font-bold text-sm shadow-md flex justify-center items-center gap-2 active:transform active:scale-95"
+                  >
+                    <ExternalLink size={18} /> Waze
+                  </button>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setLocations([])} // Reset
+                className="w-full py-2 rounded-lg bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 text-sm font-medium mt-2"
+              >
+                Nova Rota
+              </button>
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+    </div >
   );
 };
 
