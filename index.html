@@ -9,6 +9,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <style>
     /* Fonts */
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap');
 
@@ -20,10 +21,17 @@
       padding: 0;
       overflow: hidden;
       font-family: 'Inter', sans-serif;
-      background-color: #f8fafc; /* Slate-50 */
+      background-color: #f8fafc;
+      /* Slate-50 */
     }
 
-    h1, h2, h3, h4, h5, h6, .font-heading {
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6,
+    .font-heading {
       font-family: 'Outfit', sans-serif;
     }
 
@@ -59,8 +67,15 @@
     }
 
     @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(5px); }
-      to { opacity: 1; transform: translateY(0); }
+      from {
+        opacity: 0;
+        transform: translateY(5px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
     }
 
     /* Radar / Scanner Animation */
@@ -69,7 +84,8 @@
       width: 80px;
       height: 80px;
       border-radius: 50%;
-      border: 2px solid rgba(16, 185, 129, 0.3); /* Emerald-500 low opacity */
+      border: 2px solid rgba(16, 185, 129, 0.3);
+      /* Emerald-500 low opacity */
     }
 
     .radar-spinner::before {
@@ -80,32 +96,48 @@
       width: 100%;
       height: 100%;
       border-radius: 50%;
-      border-top: 2px solid #10b981; /* Emerald-500 */
+      border-top: 2px solid #10b981;
+      /* Emerald-500 */
       animation: spin 1.5s linear infinite;
       box-shadow: 0 0 15px rgba(16, 185, 129, 0.5);
     }
-    
+
     .radar-pulse {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        width: 10px;
-        height: 10px;
-        background: #10b981;
-        border-radius: 50%;
-        animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 10px;
+      height: 10px;
+      background: #10b981;
+      border-radius: 50%;
+      animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
     }
 
     @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
+      0% {
+        transform: rotate(0deg);
+      }
+
+      100% {
+        transform: rotate(360deg);
+      }
     }
 
     @keyframes pulse-ring {
-        0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
-        50% { opacity: 1; }
-        100% { transform: translate(-50%, -50%) scale(4); opacity: 0; }
+      0% {
+        transform: translate(-50%, -50%) scale(0.5);
+        opacity: 0;
+      }
+
+      50% {
+        opacity: 1;
+      }
+
+      100% {
+        transform: translate(-50%, -50%) scale(4);
+        opacity: 0;
+      }
     }
   </style>
 
