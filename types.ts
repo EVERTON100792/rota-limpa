@@ -16,6 +16,20 @@ export interface Location {
     state?: string;
     postcode?: string;
   };
+  clientId?: string;
+  originalLat?: number;
+  originalLng?: number;
+}
+
+export interface Trip {
+  id: string;
+  date: string;
+  totalDistance: number;
+  totalDuration: number;
+  costPerKm: number;
+  totalAmount: number;
+  locations: Location[];
+  routeSummary?: string;
 }
 
 export interface RouteSegment {

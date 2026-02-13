@@ -2,7 +2,9 @@ import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import MapComponent from './components/MapComponent';
 import PremiumModal from './components/PremiumModal';
-import { Location, OptimizedRoute } from './types';
+import SettingsModal from './components/SettingsModal';
+import TripHistoryModal from './components/TripHistoryModal';
+import { Location, OptimizedRoute, Trip } from './types';
 import { getOptimizedRoute } from './services/api';
 import { Menu, X } from 'lucide-react';
 
@@ -21,6 +23,8 @@ const App: React.FC = () => {
 
   const [showPremiumModal, setShowPremiumModal] = useState(false);
   const [showDevCode, setShowDevCode] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
 
   // Monitorar redimensionamento da tela
   useEffect(() => {
@@ -43,6 +47,26 @@ const App: React.FC = () => {
       setRoute(null);
     }
   }, [locations]);
+
+  // Mobile: Auto-close sidebar when route is optimized
+  useEffect(() => {
+    if (route && isMobile) {
+      setIsSidebarOpen(false);
+    }
+  }, [route, isMobile]);
+
+  const handleLoadTrip = (trip: Trip) => {
+    // Restore state from trip history
+    setLocations(trip.locations);
+    // Note: We don't restore the route object directly because it might be huge or incompatible. 
+    // We re-set locations and let user re-optimize if they want exact same path, 
+    // OR we could store the simpler route geometry. 
+    // For now, let's just restore locations so they can "Ver no Mapa" via re-optimization or just seeing the pins.
+    // Ideally, we should restore `trip.route` if it matches `OptimizedRoute` type.
+    // The `Trip` type has `locations`. Let's assume loading history = loading the stops.
+    setRoute(null); // Clear current route to force re-optimization or fresh view
+    alert("Viagem carregada! Clique em 'Otimizar Rota' para traçar o caminho novamente.");
+  };
 
   const handleOptimize = async () => {
     if (locations.length < 2) return;
@@ -107,6 +131,8 @@ const App: React.FC = () => {
             setShowPremiumModal(true);
             setShowDevCode(true);
           }}
+          onOpenSettings={() => setShowSettings(true)}
+          onOpenHistory={() => setShowHistory(true)}
           onStartNavigation={() => { }}
           isNavigating={false}
           avoidDirt={avoidDirt}
@@ -149,6 +175,18 @@ const App: React.FC = () => {
           showDevCode={showDevCode}
         />
       )}
+
+      <SettingsModal
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
+      />
+
+      <TripHistoryModal
+        isOpen={showHistory}
+        onClose={() => setShowHistory(false)}
+        onLoadTrip={handleLoadTrip}
+      />
+
     </div>
   );
 };

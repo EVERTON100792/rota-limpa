@@ -1,9 +1,13 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Location, OptimizedRoute } from '../types';
+import { Location, OptimizedRoute, Trip } from '../types';
 import { searchLocation, getReverseGeocoding } from '../services/api';
-import { MapPin, Navigation, Search, AlertTriangle, Star, Check, Trash2, Code, Calculator, Map as MapIcon, Loader2, Home, X, ExternalLink, Locate } from 'lucide-react';
+import { StorageService } from '../services/storage';
+import { MapPin, Navigation, Search, AlertTriangle, Star, Check, Trash2, Code, Calculator, Map as MapIcon, Loader2, Home, X, ExternalLink, Locate, Settings, FileText, Pencil, CheckCircle } from 'lucide-react';
 import { MAX_FREE_STOPS } from '../constants';
+import LocationItem from './LocationItem';
+import BulkImportModal from './BulkImportModal';
+import { Upload } from 'lucide-react';
 
 interface SidebarProps {
   locations: Location[];
@@ -14,6 +18,8 @@ interface SidebarProps {
   route: OptimizedRoute | null;
   onUpgradeClick: () => void;
   onShowDevCode: () => void;
+  onOpenSettings: () => void;
+  onOpenHistory: () => void;
   onStartNavigation: () => void; // Mantido para compatibilidade, mas não usado internamente
   isNavigating: boolean;
   avoidDirt: boolean;
@@ -31,6 +37,8 @@ const Sidebar: React.FC<SidebarProps> = ({
   route,
   onUpgradeClick,
   onShowDevCode,
+  onOpenSettings,
+  onOpenHistory,
   avoidDirt,
   onToggleAvoidDirt,
   roundTrip,
@@ -41,6 +49,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   const [isSearching, setIsSearching] = useState(false);
   const [isLoadingLocation, setIsLoadingLocation] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
+  const [showBulkImport, setShowBulkImport] = useState(false);
 
   // Freight Calculation State
   const [freightPricePerKm, setFreightPricePerKm] = useState<string>(() => {
@@ -164,31 +173,70 @@ const Sidebar: React.FC<SidebarProps> = ({
     }
   }
 
-  // --- External GPS Logic ---
-  const openExternalGPS = (app: 'google' | 'waze') => {
-    if (!route || route.waypoints.length < 2) return;
+  // --- Navigation Logic ---
+  const openNavigation = () => {
+    if (!locations || locations.length < 2) return;
 
-    const origin = route.waypoints[0];
-    const destination = route.waypoints[route.waypoints.length - 1];
-    const waypoints = route.waypoints.slice(1, -1); // Intermediate stops
+    // Filter valid locations
+    const validLocs = locations.filter(l => l.lat && l.lng);
+    if (validLocs.length < 2) return;
 
-    if (app === 'google') {
-      // Google Maps URL Scheme
-      const originStr = `${origin.lat},${origin.lng}`;
-      const destStr = `${destination.lat},${destination.lng}`;
-      const waypointsStr = waypoints.map(w => `${w.lat},${w.lng}`).join('|');
+    const origin = validLocs[0];
+    const destination = validLocs[validLocs.length - 1];
+    const waypoints = validLocs.slice(1, -1);
 
-      let url = `https://www.google.com/maps/dir/?api=1&origin=${originStr}&destination=${destStr}&travelmode=driving`;
-      if (waypoints.length > 0) {
-        url += `&waypoints=${waypointsStr}`;
+    // Google Maps URL Scheme with Fidelity (originalLat/Lng)
+    const formatCoord = (l: Location) => `${l.originalLat || l.lat},${l.originalLng || l.lng}`;
+
+    const originStr = formatCoord(origin);
+    const destStr = formatCoord(destination);
+    const waypointsStr = waypoints.map(formatCoord).join('|');
+
+    let url = `https://www.google.com/maps/dir/?api=1&origin=${originStr}&destination=${destStr}&travelmode=driving`;
+    if (waypoints.length > 0) {
+      url += `&waypoints=${waypointsStr}`;
+    }
+    window.open(url, '_blank');
+  };
+
+  const handleFinishTrip = () => {
+    if (!route || locations.length < 2) {
+      alert("Não há uma rota ativa para finalizar.");
+      return;
+    }
+
+    const pricePerKmStr = StorageService.getFreightPrice();
+    let finalPrice = parseFloat(pricePerKmStr) || 0;
+
+    if (finalPrice === 0) {
+      const input = prompt("Qual o valor por KM cobrado? (Ex: 1.50)");
+      if (input) {
+        const parsed = parseFloat(input.replace(',', '.'));
+        if (!isNaN(parsed)) {
+          finalPrice = parsed;
+          StorageService.setFreightPrice(parsed.toString());
+        }
       }
-      window.open(url, '_blank');
-    } else if (app === 'waze') {
-      if (waypoints.length > 0) {
-        alert("Aviso: O Waze pode não respeitar as paradas intermediárias (waypoints) via link direto. Para garantir a rota exata evitando terra, recomendamos o Google Maps.");
-      }
-      const url = `https://waze.com/ul?ll=${destination.lat},${destination.lng}&navigate=yes`;
-      window.open(url, '_blank');
+    }
+
+    const distanceKm = route.totalDistance / 1000;
+    const totalAmount = distanceKm * finalPrice;
+
+    if (confirm(`Finalizar a viagem?\n\nDistância: ${distanceKm.toFixed(1)}km\nTotal: R$ ${totalAmount.toFixed(2)}\n\nIsso salvará o histórico e limpará a rota atual.`)) {
+      const newTrip: Trip = {
+        id: crypto.randomUUID(),
+        date: new Date().toISOString(),
+        totalDistance: route.totalDistance,
+        totalDuration: route.totalDuration,
+        costPerKm: finalPrice,
+        totalAmount: totalAmount,
+        locations: locations,
+        routeSummary: locations.map(l => l.name).join(' -> ')
+      };
+
+      StorageService.saveTrip(newTrip);
+      onOpenHistory();
+      setLocations([]);
     }
   };
 
@@ -201,10 +249,17 @@ const Sidebar: React.FC<SidebarProps> = ({
           <Navigation className="h-6 w-6" />
           <h1 className="text-xl font-bold tracking-tight">RotaLimpa</h1>
         </div>
-        <div className="flex gap-2">
-          <button onClick={onShowDevCode} className="p-1 hover:bg-emerald-700 rounded" title="Ver Código Backend">
-            <Code size={18} />
+        <div className="flex gap-2 items-center">
+          <button onClick={onOpenHistory} className="p-1.5 hover:bg-emerald-700 rounded transition-colors" title="Histórico">
+            <FileText size={18} />
           </button>
+          <button onClick={onOpenSettings} className="p-1.5 hover:bg-emerald-700 rounded transition-colors" title="Configurações">
+            <Settings size={18} />
+          </button>
+          <button onClick={() => setShowBulkImport(true)} className="p-1.5 hover:bg-emerald-700 rounded transition-colors" title="Importar Lista">
+            <Upload size={18} />
+          </button>
+
           {isPremium ? (
             <span className="bg-yellow-400 text-emerald-900 text-xs font-bold px-2 py-1 rounded-full flex items-center gap-1">
               <Star size={12} fill="currentColor" /> PRO
@@ -346,41 +401,19 @@ const Sidebar: React.FC<SidebarProps> = ({
           ) : (
             <ul className="space-y-3 relative p-1 custom-scrollbar pb-20">
               {locations.map((loc, index) => (
-                <div
+                <LocationItem
                   key={index}
-                  className="group bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-all duration-200 p-3 flex items-start justify-between relative overflow-hidden"
-                >
-                  {/* Connector Line (if not last) */}
-                  {index !== locations.length - 1 && (
-                    <div className="absolute left-[19px] top-[40px] bottom-[-20px] w-[2px] bg-gray-100 z-0 group-hover:bg-emerald-100 transition-colors"></div>
-                  )}
-
-                  <div className="flex items-start gap-3 relative z-10 w-full">
-                    <div className={`mt-0.5 w-8 h-8 rounded-full flex items-center justify-center shrink-0 border shadow-sm ${index === 0 ? 'bg-emerald-100 border-emerald-200 text-emerald-700' :
-                      index === locations.length - 1 ? 'bg-slate-800 border-slate-700 text-white' :
-                        'bg-white border-gray-200 text-gray-500'
-                      }`}>
-                      <span className="text-xs font-bold font-heading">{index + 1}</span>
-                    </div>
-
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-gray-800 truncate leading-tight mb-0.5">
-                        {loc.name.split(',')[0]}
-                      </p>
-                      <p className="text-[11px] text-gray-500 truncate">
-                        {loc.address?.city || loc.address?.street || "Endereço desconhecido"}
-                      </p>
-                    </div>
-
-                    <button
-                      onClick={() => removeLocation(index)}
-                      className="text-gray-300 hover:text-red-500 hover:bg-red-50 p-1.5 rounded-lg transition-colors"
-                      title="Remover"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </div>
+                  loc={loc}
+                  index={index}
+                  isLast={index === locations.length - 1}
+                  isFirst={index === 0}
+                  onRemove={() => removeLocation(index)}
+                  onUpdate={(newLoc) => {
+                    const newLocs = [...locations];
+                    newLocs[index] = newLoc;
+                    setLocations(newLocs);
+                  }}
+                />
               ))}
             </ul>
           )}
@@ -568,115 +601,120 @@ const Sidebar: React.FC<SidebarProps> = ({
         )}
 
         {/* Footer / Actions */}
-        <div className="p-4 bg-gray-50 border-t border-gray-200 shrink-0">
-          {!route ? (
-            <div className="space-y-3">
-              {/* Options */}
-              {/* Options */}
-              <div className={`flex items-center justify-between p-3 rounded-lg border ${!isPremium ? 'bg-gray-100 border-gray-200 opacity-75 relative overflow-hidden' : 'bg-gray-50 border-gray-200'}`}>
-                <div className="flex items-center gap-2">
-                  <div className={`p-1.5 rounded-full ${avoidDirt ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-500'}`}>
-                    <div className="h-4 w-4 flex items-center justify-center font-bold text-xs">
-                      {avoidDirt ? <Check size={12} /> : <X size={12} />}
-                    </div>
-                  </div>
-                  <div className="flex flex-col">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-gray-700">Evitar Estrada de Terra</span>
-                      {!isPremium && <span className="bg-gray-900 text-white text-[9px] px-1.5 py-0.5 rounded uppercase font-bold flex items-center gap-0.5"><Star size={8} /> PRO</span>}
-                    </div>
-                    <span className="text-[10px] text-gray-400 leading-tight">
-                      {!isPremium ? "Desvie de buracos e atoleiros." : "Priorizar asfalto (pode aumentar a distância)"}
-                    </span>
-                  </div>
-                </div>
-                <button
-                  onClick={() => {
-                    if (isPremium) {
-                      onToggleAvoidDirt();
-                    } else {
-                      onUpgradeClick();
-                    }
-                  }}
-                  disabled={!isPremium && false} // Keep clickable to trigger upgrade modal
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 ${avoidDirt ? 'bg-emerald-600' : 'bg-gray-300'} ${!isPremium ? 'cursor-pointer' : ''}`}
-                >
-                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${avoidDirt ? 'translate-x-6' : 'translate-x-1'}`} />
-                </button>
-              </div>
+        <div className="p-4 bg-white border-t border-gray-100 space-y-3 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-20">
 
-              {/* Round Trip Option */}
-              <div className="flex items-center justify-between bg-gray-50 p-3 rounded-lg border border-gray-200">
-                <div className="flex items-center gap-2">
-                  <div className={`p-1.5 rounded-full ${roundTrip ? 'bg-blue-100 text-blue-700' : 'bg-gray-200 text-gray-500'}`}>
-                    <div className="h-4 w-4 flex items-center justify-center font-bold text-xs">
-                      {roundTrip ? <Navigation size={12} className="rotate-180" /> : <X size={12} />}
-                    </div>
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="text-sm font-medium text-gray-700">Ida e Volta</span>
-                    <span className="text-[10px] text-gray-400 leading-tight">Retornar ao início</span>
-                  </div>
-                </div>
-                <button
-                  onClick={onToggleRoundTrip}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${roundTrip ? 'bg-blue-600' : 'bg-gray-300'}`}
-                >
-                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${roundTrip ? 'translate-x-6' : 'translate-x-1'}`} />
-                </button>
-              </div>
+          {/* Main Action Button */}
+          <button
+            onClick={route ? openNavigation : onOptimize}
+            disabled={locations.length < 2 || isOptimizing}
+            className={`
+              w-full py-4 rounded-xl font-bold text-white shadow-lg flex items-center justify-center gap-2 transition-all transform hover:scale-[1.02] active:scale-[0.98]
+              ${locations.length < 2
+                ? 'bg-gray-300 cursor-not-allowed shadow-none'
+                : route
+                  ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-200'
+                  : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200'
+              }
+            `}
+          >
+            {isOptimizing ? (
+              <>
+                <Loader2 className="animate-spin" size={20} />
+                Calculando Rota...
+              </>
+            ) : route ? (
+              <>
+                <Navigation size={20} /> Navegar (Google Maps)
+              </>
+            ) : (
+              <>
+                <MapPin size={20} /> Otimizar Rota
+              </>
+            )}
+          </button>
 
-              {/* Premium Action Button */}
-              <div className="pt-2">
-                <button
-                  onClick={onOptimize}
-                  className="relative w-full group overflow-hidden rounded-xl shadow-lg shadow-emerald-500/20 transition-all duration-300 hover:shadow-emerald-500/40 hover:-translate-y-0.5 active:translate-y-0"
-                >
-                  <div className="absolute inset-0 bg-gradient-to-r from-emerald-600 to-teal-500 transition-all duration-300 group-hover:scale-105"></div>
-                  <div className="absolute inset-0 bg-white/0 group-hover:bg-white/10 transition-colors"></div>
+          {/* Secondary Actions Grid */}
+          <div className="grid grid-cols-2 gap-3">
+            {/* Finalizar Serviço */}
+            <button
+              onClick={handleFinishTrip}
+              disabled={!route}
+              className={`
+                  flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm border-2 transition-all
+                  ${!route
+                  ? 'border-gray-100 text-gray-300 cursor-not-allowed'
+                  : 'border-emerald-100 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:border-emerald-200'
+                }
+                `}
+            >
+              <CheckCircle size={16} /> Finalizar
+            </button>
 
-                  <div className="relative relative flex items-center justify-center gap-3 py-4">
-                    <span className="font-heading font-bold text-white tracking-wide text-lg">OTIMIZAR ROTA</span>
-                    <div className="bg-white/20 p-1.5 rounded-full">
-                      <Navigation size={18} className="text-white fill-current" />
-                    </div>
-                  </div>
-                </button>
-                <p className="text-center text-[10px] text-gray-400 mt-2 font-medium">
-                  IA de Roteamento Ativa • OSRM v5.24
-                </p>
-              </div>
+            {/* Round Trip Toggle */}
+            <button
+              onClick={onToggleRoundTrip}
+              className={`
+                  flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm border-2 transition-all
+                   ${roundTrip
+                  ? 'border-blue-500 bg-blue-50 text-blue-700'
+                  : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                }
+                `}
+            >
+              <Calculator size={16} /> {roundTrip ? 'Ida e Volta' : 'Só Ida'}
+            </button>
+          </div>
+
+          {/* Dirt Road Toggle */}
+          <div
+            onClick={onToggleAvoidDirt}
+            className={`
+                flex items-center justify-between px-4 py-3 rounded-xl border-2 cursor-pointer transition-all
+                ${avoidDirt
+                ? 'border-amber-500 bg-amber-50'
+                : 'border-gray-100 hover:border-gray-200 bg-gray-50'
+              }
+              `}
+          >
+            <div className="flex items-center gap-2">
+              <AlertTriangle size={16} className={avoidDirt ? "text-amber-600" : "text-gray-400"} />
+              <span className={`text-sm font-semibold ${avoidDirt ? "text-amber-800" : "text-gray-500"}`}>
+                Evitar Estradas de Terra
+              </span>
             </div>
-          ) : (
-            <div className="flex flex-col gap-3">
-              <div className="text-center">
-                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">Iniciar Navegação GPS</span>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    onClick={() => openExternalGPS('google')}
-                    className="py-3 px-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-md flex justify-center items-center gap-2 active:transform active:scale-95"
-                  >
-                    <MapIcon size={18} /> Google Maps
-                  </button>
-                  <button
-                    onClick={() => openExternalGPS('waze')}
-                    className="py-3 px-2 rounded-lg bg-cyan-400 hover:bg-cyan-500 text-white font-bold text-sm shadow-md flex justify-center items-center gap-2 active:transform active:scale-95"
-                  >
-                    <ExternalLink size={18} /> Waze
-                  </button>
+
+            <div className={`w-10 h-5 rounded-full relative transition-colors ${avoidDirt ? "bg-amber-500" : "bg-gray-300"}`}>
+              <div className={`absolute top-1 left-1 bg-white w-3 h-3 rounded-full transition-transform ${avoidDirt ? "translate-x-5" : "translate-x-0"}`} />
+            </div>
+          </div>
+
+          {/* Stats Panel (Only if route exists) */}
+          {route && (
+            <div className="bg-gray-900 text-white rounded-xl p-4 mt-2">
+              <div className="flex justify-between items-end">
+                <div>
+                  <p className="text-gray-400 text-xs uppercase tracking-wider font-bold mb-1">Distância</p>
+                  <p className="text-xl font-bold">{(route.totalDistance / 1000).toFixed(1)} <span className="text-sm text-gray-400">km</span></p>
+                </div>
+                <div className="text-right">
+                  <p className="text-gray-400 text-xs uppercase tracking-wider font-bold mb-1">Tempo</p>
+                  <p className="text-xl font-bold">{~~(route.totalDuration / 3600)}h {~~((route.totalDuration % 3600) / 60)}m</p>
                 </div>
               </div>
-
-              <button
-                onClick={() => setLocations([])} // Reset
-                className="w-full py-2 rounded-lg bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 text-sm font-medium mt-2"
-              >
-                Nova Rota
-              </button>
             </div>
           )}
+
         </div>
       </div>
+
+      <BulkImportModal
+        isOpen={showBulkImport}
+        onClose={() => setShowBulkImport(false)}
+        onImport={(newLocs) => {
+          setLocations(prev => [...prev, ...newLocs]);
+          setShowBulkImport(false);
+        }}
+      />
     </div >
   );
 };

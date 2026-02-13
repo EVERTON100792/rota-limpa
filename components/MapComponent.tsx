@@ -6,10 +6,10 @@ import { OptimizedRoute, Location } from '../types';
 import { COLOR_PAVED, COLOR_UNPAVED, COLOR_MARKER_START, COLOR_MARKER_END, COLOR_MARKER_DEFAULT } from '../constants';
 
 // Fix Leaflet default icon issue in React
-const createIcon = (color: string, number?: number) => {
+const createIcon = (color: string, content: string | number) => {
     return L.divIcon({
         className: 'custom-div-icon',
-        html: `<div style="background-color: ${color}; width: 24px; height: 24px; border-radius: 50%; border: 2px solid white; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 12px; color: white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">${number || ''}</div>`,
+        html: `<div style="background-color: ${color}; width: 24px; height: 24px; border-radius: 50%; border: 2px solid white; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 12px; color: white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">${content}</div>`,
         iconSize: [24, 24],
         iconAnchor: [12, 12]
     });
@@ -91,16 +91,22 @@ const MapComponent: React.FC<MapComponentProps> = ({
                 {/* Static Markers (Waypoints) */}
                 {pointsToDisplay.map((loc, idx) => {
                     let color = COLOR_MARKER_DEFAULT;
-                    if (route) {
-                        if (idx === 0) color = COLOR_MARKER_START;
-                        else if (idx === pointsToDisplay.length - 1) color = COLOR_MARKER_END;
+                    let content: string | number = idx;
+
+                    if (idx === 0) {
+                        color = COLOR_MARKER_START;
+                        content = '▶'; // Play symbol
+                    } else if (idx === pointsToDisplay.length - 1 && pointsToDisplay.length > 1) {
+                        // Only mark as End if there's more than 1 point
+                        color = COLOR_MARKER_END;
+                        content = '🏁'; // Checkered Flag symbol
                     }
 
                     return (
                         <Marker
                             key={`${loc.lat}-${loc.lng}-${idx}`}
                             position={[loc.lat, loc.lng]}
-                            icon={createIcon(color, idx + 1)}
+                            icon={createIcon(color, content)}
                         >
                             <Popup>
                                 <strong>{loc.name}</strong>
