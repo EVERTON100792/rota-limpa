@@ -1,4 +1,4 @@
-export const MAX_FREE_STOPS = 3;
+export const MAX_FREE_STOPS = 99;
 export const PREMUIM_PRICE_ID = 'price_123456789'; // Example Stripe Price ID
 
 // Colors

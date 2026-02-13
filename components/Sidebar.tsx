@@ -97,11 +97,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         const locationData = await getReverseGeocoding(latitude, longitude);
 
         if (locationData) {
-          if (!isPremium && locations.length >= MAX_FREE_STOPS) {
-            alert(`Versão gratuita cheia. Remova uma cidade ou atualize.`);
-          } else {
-            setLocations(prev => [locationData, ...prev]);
-          }
+          setLocations(prev => [locationData, ...prev]);
         }
         setIsLoadingLocation(false);
       },
@@ -115,11 +111,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   };
 
   const addLocation = (loc: Location) => {
-    if (!isPremium && locations.length >= MAX_FREE_STOPS) {
-      alert(`Versão gratuita limitada a ${MAX_FREE_STOPS} paradas. Atualize para Premium!`);
-      onUpgradeClick();
-      return;
-    }
+    // Premium check removed (Unlimited stops for everyone)
     setLocations([...locations, loc]);
     setSearchResults([]);
     setQuery('');
@@ -453,27 +445,40 @@ const Sidebar: React.FC<SidebarProps> = ({
                   <span className="text-sm font-bold bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full">{route.tollCount}</span>
                 </div>
 
+                {/* Toll List - Freemium Lock */}
                 {route.tollDetails && route.tollDetails.length > 0 ? (
-                  <ul className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                    {route.tollDetails.map((toll, idx) => (
-                      <li key={idx} className="text-xs text-slate-700 flex flex-col border-b border-gray-50 pb-2 last:border-0 hover:bg-gray-50 p-1 rounded transition-colors">
-                        <div className="flex justify-between items-start">
-                          <span className="font-semibold text-gray-800">{toll.name || "Pedágio identificado"}</span>
+                  <div className="relative">
+                    {!isPremium && (
+                      <div className="absolute inset-0 z-10 bg-white/10 backdrop-blur-[2px] flex items-center justify-center">
+                        <div className="bg-gray-900/90 text-white text-xs p-2 rounded shadow-lg text-center">
+                          <p className="font-bold mb-1">Detalhes Bloqueados</p>
+                          <button onClick={onUpgradeClick} className="bg-emerald-500 hover:bg-emerald-600 px-2 py-1 rounded font-bold text-[10px] transition">
+                            Ver Onde Pagar
+                          </button>
                         </div>
-
-                        {toll.operator && (
-                          <span className="text-[10px] text-gray-400 mt-0.5">Op: {toll.operator}</span>
-                        )}
-
-                        {toll.nearbyLocation && (
-                          <div className="flex items-center gap-1 mt-1 text-emerald-600 font-medium">
-                            <MapIcon size={10} />
-                            <span className="text-[10px]">{toll.nearbyLocation}</span>
+                      </div>
+                    )}
+                    <ul className={`space-y-2 max-h-60 overflow-y-auto pr-1 ${!isPremium ? 'opacity-50 select-none pointer-events-none' : ''}`}>
+                      {route.tollDetails.map((toll, idx) => (
+                        <li key={idx} className="text-xs text-slate-700 flex flex-col border-b border-gray-50 pb-2 last:border-0 hover:bg-gray-50 p-1 rounded transition-colors">
+                          <div className="flex justify-between items-start">
+                            <span className="font-semibold text-gray-800">{toll.name || "Pedágio Identificado"}</span>
                           </div>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
+
+                          {toll.operator && (
+                            <span className="text-[10px] text-gray-400 mt-0.5">Op: {toll.operator}</span>
+                          )}
+
+                          {toll.nearbyLocation && (
+                            <div className="flex items-center gap-1 mt-1 text-emerald-600 font-medium">
+                              <MapIcon size={10} />
+                              <span className="text-[10px]">{toll.nearbyLocation}</span>
+                            </div>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 ) : (
                   <span className="text-xs text-gray-400 italic">Nenhum pedágio identificado nesta rota.</span>
                 )}
@@ -481,7 +486,21 @@ const Sidebar: React.FC<SidebarProps> = ({
             </div>
 
             {/* Freight Calculator */}
-            <div className="bg-white border border-gray-200 p-4 rounded-lg shadow-sm space-y-3">
+            {/* Freight Calculator */}
+            <div className="bg-white border border-gray-200 p-4 rounded-lg shadow-sm space-y-3 relative overflow-hidden">
+              {!isPremium && (
+                <div className="absolute inset-0 bg-white/60 backdrop-blur-[1px] z-10 flex flex-col items-center justify-center text-center p-4">
+                  <div className="bg-white p-3 rounded-full shadow-lg mb-2">
+                    <Calculator className="text-emerald-600" size={20} />
+                  </div>
+                  <h4 className="font-bold text-gray-800 text-sm">Calculadora de Frete</h4>
+                  <p className="text-[10px] text-gray-500 mb-2">Calcule seus ganhos automaticamente.</p>
+                  <button onClick={onUpgradeClick} className="bg-gray-900 text-white text-xs px-3 py-1.5 rounded font-bold hover:bg-black transition">
+                    Desbloquear
+                  </button>
+                </div>
+              )}
+
               <div className="flex items-center gap-2 text-gray-700 font-semibold text-sm border-b border-gray-100 pb-2">
                 <Calculator size={16} /> Calculadora de Frete
               </div>
@@ -504,7 +523,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                       setFreightPricePerKm(e.target.value);
                       localStorage.setItem('freightPricePerKm', e.target.value);
                     }}
-                    className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none text-sm font-bold text-gray-800"
+                    disabled={!isPremium}
+                    className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none text-sm font-bold text-gray-800 disabled:bg-gray-50 disabled:text-gray-400"
                   />
                 </div>
               </div>
@@ -542,7 +562,8 @@ const Sidebar: React.FC<SidebarProps> = ({
         {!route ? (
           <div className="space-y-3">
             {/* Options */}
-            <div className="flex items-center justify-between bg-gray-50 p-3 rounded-lg border border-gray-200">
+            {/* Options */}
+            <div className={`flex items-center justify-between p-3 rounded-lg border ${!isPremium ? 'bg-gray-100 border-gray-200 opacity-75 relative overflow-hidden' : 'bg-gray-50 border-gray-200'}`}>
               <div className="flex items-center gap-2">
                 <div className={`p-1.5 rounded-full ${avoidDirt ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-500'}`}>
                   <div className="h-4 w-4 flex items-center justify-center font-bold text-xs">
@@ -550,13 +571,25 @@ const Sidebar: React.FC<SidebarProps> = ({
                   </div>
                 </div>
                 <div className="flex flex-col">
-                  <span className="text-sm font-medium text-gray-700">Evitar Estrada de Terra</span>
-                  <span className="text-[10px] text-gray-400 leading-tight">Priorizar asfalto (pode aumentar a distância)</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-gray-700">Evitar Estrada de Terra</span>
+                    {!isPremium && <span className="bg-gray-900 text-white text-[9px] px-1.5 py-0.5 rounded uppercase font-bold flex items-center gap-0.5"><Star size={8} /> PRO</span>}
+                  </div>
+                  <span className="text-[10px] text-gray-400 leading-tight">
+                    {!isPremium ? "Desvie de buracos e atoleiros." : "Priorizar asfalto (pode aumentar a distância)"}
+                  </span>
                 </div>
               </div>
               <button
-                onClick={onToggleAvoidDirt}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 ${avoidDirt ? 'bg-emerald-600' : 'bg-gray-300'}`}
+                onClick={() => {
+                  if (isPremium) {
+                    onToggleAvoidDirt();
+                  } else {
+                    onUpgradeClick();
+                  }
+                }}
+                disabled={!isPremium && false} // Keep clickable to trigger upgrade modal
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 ${avoidDirt ? 'bg-emerald-600' : 'bg-gray-300'} ${!isPremium ? 'cursor-pointer' : ''}`}
               >
                 <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${avoidDirt ? 'translate-x-6' : 'translate-x-1'}`} />
               </button>
