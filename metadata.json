@@ -1,0 +1,7 @@
+{
+  "name": "RotaLimpa",
+  "description": "A logistics web app for drivers to optimize routes and avoid unpaved roads. Features route optimization, dirt road detection, and premium subscription handling.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
