@@ -8,6 +8,8 @@ import { MAX_FREE_STOPS } from '../constants';
 import LocationItem from './LocationItem';
 import BulkImportModal from './BulkImportModal';
 import { Upload } from 'lucide-react';
+import CameraInput from './CameraInput';
+import { parseAddressesFromImage } from '../services/ocrService';
 
 interface SidebarProps {
   locations: Location[];
@@ -50,6 +52,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   const [isLoadingLocation, setIsLoadingLocation] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
   const [showBulkImport, setShowBulkImport] = useState(false);
+  const [isProcessingOcr, setIsProcessingOcr] = useState(false);
 
   // Freight Calculation State
   const [freightPricePerKm, setFreightPricePerKm] = useState<string>(() => {
@@ -144,6 +147,44 @@ const Sidebar: React.FC<SidebarProps> = ({
       alert("Erro ao buscar endereço.");
     } finally {
       setIsSearching(false);
+    }
+  };
+
+  const handleCameraCapture = async (file: File) => {
+    setIsProcessingOcr(true);
+    try {
+      const addresses = await parseAddressesFromImage(file);
+
+      if (addresses.length === 0) {
+        alert("Nenhum endereço identificado na imagem. Tente novamente com uma foto mais clara.");
+        return;
+      }
+
+      let addedCount = 0;
+      for (const addressText of addresses) {
+        try {
+          const results = await searchLocation(addressText);
+          if (results && results.length > 0) {
+            // Add with a small delay to avoid state batching issues if needed, strictly simpler here
+            setLocations(prev => [...prev, results[0]]);
+            addedCount++;
+          }
+        } catch (err) {
+          console.warn(`Failed to search for address: ${addressText}`, err);
+        }
+      }
+
+      if (addedCount > 0) {
+        alert(`${addedCount} endereços adicionados com sucesso!`);
+      } else {
+        alert("Endereços foram lidos, mas não encontrados no mapa. Verifique se estão completos (Rua, Número, Cidade).");
+      }
+
+    } catch (error) {
+      console.error("OCR Error:", error);
+      alert("Erro ao processar imagem. Verifique sua conexão ou tente novamente.");
+    } finally {
+      setIsProcessingOcr(false);
     }
   };
 
@@ -259,6 +300,8 @@ const Sidebar: React.FC<SidebarProps> = ({
           <button onClick={() => setShowBulkImport(true)} className="p-1.5 hover:bg-emerald-700 rounded transition-colors" title="Importar Lista">
             <Upload size={18} />
           </button>
+
+          <CameraInput onCapture={handleCameraCapture} disabled={isProcessingOcr || !!route} />
 
           {isPremium ? (
             <span className="bg-yellow-400 text-emerald-900 text-xs font-bold px-2 py-1 rounded-full flex items-center gap-1">
