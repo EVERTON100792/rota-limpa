@@ -39,7 +39,7 @@ export async function parseAddressesFromImage(imageFile: File): Promise<string[]
     }
 
     try {
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-001" });
 
         const imagePart = await fileToGenerativePart(imageFile);
 
