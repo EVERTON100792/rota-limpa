@@ -53,6 +53,13 @@ export const searchLocation = async (query: string): Promise<Location[]> => {
           postcode
         }
       };
+    }).sort((a: any, b: any) => {
+      // Prioritize results that have a house number if the query looks like it has a number
+      const hasNumberA = !!a.address.number;
+      const hasNumberB = !!b.address.number;
+      if (hasNumberA && !hasNumberB) return -1;
+      if (!hasNumberA && hasNumberB) return 1;
+      return 0;
     }).filter((loc: any) => {
       const key = `${loc.lat.toFixed(4)}-${loc.lng.toFixed(4)}`;
       if (seen.has(key)) return false;
@@ -396,18 +403,72 @@ export const getOptimizedRoute = async (
     tollCount = tollDetails.length;
     const validWaypoints = orderedLocations.filter(l => l !== undefined);
 
-    tollDetails.forEach(toll => {
-      let closestDist = Infinity;
-      let closestCity = "";
-      validWaypoints.forEach(wp => {
-        const d = calculateDistance(toll.lat, toll.lng, wp.lat, wp.lng);
-        if (d < closestDist) {
-          closestDist = d;
-          closestCity = wp.address?.city || wp.address?.town || wp.address?.municipality || "";
+    // --- Accurate City Naming via Reverse Geocoding ---
+    // User Feedback: "Proximo a Rolandia" was wrong, should be "Jataizinho".
+    // Old logic only checked distance to Waypoints. New logic: Reverse Geocode the TOLL itself.
+
+    // We limit this to avoid rate limits if there are huge numbers of tolls, 
+    // but typically a route has < 10 tolls.
+    const uniqueTolls = tollDetails; // already deduped above
+
+    await Promise.all(uniqueTolls.map(async (toll) => {
+      try {
+        // 1. Try to get City from Overpass Tags (if we had them here, but we normalized `tollDetails` structure)
+        // Since we don't store raw tags in `tollDetails`, we skip to Reverse Geocoding.
+
+        // 2. Reverse Geocode the Toll Location
+        // Use a slight delay or just run parallel (Nominatim might rate limit, but usually fine for small batches)
+        const locationData = await getReverseGeocoding(toll.lat, toll.lng);
+
+        if (locationData && locationData.address) {
+          const city = locationData.address.city || locationData.address.town || locationData.address.village || locationData.address.municipality;
+          if (city) {
+            toll.nearbyLocation = city; // Direct City Name: "Jataizinho"
+            return;
+          }
         }
-      });
-      toll.nearbyLocation = closestCity ? `Próximo a ${closestCity}` : `Aprox. ${Math.round(closestDist)}km`;
-    });
+
+        // 3. Fallback: Distance to closest Waypoint (Old Logic)
+        let closestDist = Infinity;
+        let closestCity = "";
+        validWaypoints.forEach(wp => {
+          const d = calculateDistance(toll.lat, toll.lng, wp.lat, wp.lng);
+          if (d < closestDist) {
+            closestDist = d;
+            const addr = wp.address || {};
+            closestCity = addr.city || addr.town || addr.village || addr.municipality || "";
+            if (!closestCity && wp.name && !/\d/.test(wp.name) && !wp.name.includes(',')) {
+              closestCity = wp.name;
+            }
+          }
+        });
+        toll.nearbyLocation = closestCity ? `Próximo a ${closestCity}` : `Aprox. ${Math.round(closestDist)}km`;
+
+      } catch (e) {
+        console.warn("Toll Reverse Geocode Failed", e);
+        toll.nearbyLocation = "Local Desconhecido";
+      }
+    }));
+
+    // --- Round Trip Visual Fix: Append Start to Waypoints ---
+    // User wants the "Finish Flag" (Checkered) at the Start Location for Round Trips.
+    // MapComponent uses the last waypoint for the flag.
+    if (roundTrip && validWaypoints.length > 0) {
+      // Check if the last waypoint is already the start (OSRM usually doesn't do this for 'waypoints' array)
+      const startNode = validWaypoints[0];
+      const lastNode = validWaypoints[validWaypoints.length - 1];
+
+      // If last node is not physically the start node (approx check)
+      const dist = calculateDistance(startNode.lat, startNode.lng, lastNode.lat, lastNode.lng);
+      if (dist > 0.1) {
+        // Append a distinct copy of the start node as the "Arrival" point
+        validWaypoints.push({
+          ...startNode,
+          name: "Retorno ao Início",
+          address: startNode.address
+        });
+      }
+    }
 
     return {
       totalDistance: trip.distance,

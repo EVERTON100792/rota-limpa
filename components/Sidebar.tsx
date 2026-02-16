@@ -6,10 +6,7 @@ import { StorageService } from '../services/storage';
 import { MapPin, Navigation, Search, AlertTriangle, Star, Check, Trash2, Code, Calculator, Map as MapIcon, Loader2, Home, X, ExternalLink, Locate, Settings, FileText, Pencil, CheckCircle } from 'lucide-react';
 import { MAX_FREE_STOPS } from '../constants';
 import LocationItem from './LocationItem';
-import BulkImportModal from './BulkImportModal';
-import { Upload } from 'lucide-react';
-import CameraInput from './CameraInput';
-import { parseAddressesFromImage } from '../services/ocrService';
+
 
 interface SidebarProps {
   locations: Location[];
@@ -28,6 +25,7 @@ interface SidebarProps {
   onToggleAvoidDirt: () => void;
   roundTrip: boolean;
   onToggleRoundTrip: () => void;
+  setRoundTrip: (value: boolean) => void;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({
@@ -45,18 +43,26 @@ const Sidebar: React.FC<SidebarProps> = ({
   onToggleAvoidDirt,
   roundTrip,
   onToggleRoundTrip,
+  setRoundTrip,
 }) => {
   const [query, setQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Location[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [isLoadingLocation, setIsLoadingLocation] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
-  const [showBulkImport, setShowBulkImport] = useState(false);
-  const [isProcessingOcr, setIsProcessingOcr] = useState(false);
+  // Removed BulkImport/OCR state as per request
 
   // Freight Calculation State
   const [freightPricePerKm, setFreightPricePerKm] = useState<string>(() => {
     return localStorage.getItem('freightPricePerKm') || '';
+  });
+
+  // Fuel Calculation State
+  const [fuelConsumption, setFuelConsumption] = useState<string>(() => {
+    return localStorage.getItem('fuelConsumption') || '';
+  });
+  const [fuelPrice, setFuelPrice] = useState<string>(() => {
+    return localStorage.getItem('fuelPrice') || '';
   });
 
   // Ref to handle clicking outside
@@ -110,6 +116,8 @@ const Sidebar: React.FC<SidebarProps> = ({
 
         if (locationData) {
           setLocations(prev => [locationData, ...prev]);
+          // Auto-enable Round Trip as per user request
+          setRoundTrip(true);
         }
         setIsLoadingLocation(false);
       },
@@ -150,43 +158,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     }
   };
 
-  const handleCameraCapture = async (file: File) => {
-    setIsProcessingOcr(true);
-    try {
-      const addresses = await parseAddressesFromImage(file);
-
-      if (addresses.length === 0) {
-        alert("Nenhum endereço identificado na imagem. Tente novamente com uma foto mais clara.");
-        return;
-      }
-
-      let addedCount = 0;
-      for (const addressText of addresses) {
-        try {
-          const results = await searchLocation(addressText);
-          if (results && results.length > 0) {
-            // Add with a small delay to avoid state batching issues if needed, strictly simpler here
-            setLocations(prev => [...prev, results[0]]);
-            addedCount++;
-          }
-        } catch (err) {
-          console.warn(`Failed to search for address: ${addressText}`, err);
-        }
-      }
-
-      if (addedCount > 0) {
-        alert(`${addedCount} endereços adicionados com sucesso!`);
-      } else {
-        alert("Endereços foram lidos, mas não encontrados no mapa. Verifique se estão completos (Rua, Número, Cidade).");
-      }
-
-    } catch (error) {
-      console.error("OCR Error:", error);
-      alert("Erro ao processar imagem. Verifique sua conexão ou tente novamente.");
-    } finally {
-      setIsProcessingOcr(false);
-    }
-  };
+  // Removed handleCameraCapture logic
 
   const removeLocation = (index: number) => {
     const newLocs = [...locations];
@@ -297,11 +269,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           <button onClick={onOpenSettings} className="p-1.5 hover:bg-emerald-700 rounded transition-colors" title="Configurações">
             <Settings size={18} />
           </button>
-          <button onClick={() => setShowBulkImport(true)} className="p-1.5 hover:bg-emerald-700 rounded transition-colors" title="Importar Lista">
-            <Upload size={18} />
-          </button>
-
-          <CameraInput onCapture={handleCameraCapture} disabled={isProcessingOcr || !!route} />
+          {/* Features Removed as per request (Bulk Import & Camera) */}
 
           {isPremium ? (
             <span className="bg-yellow-400 text-emerald-900 text-xs font-bold px-2 py-1 rounded-full flex items-center gap-1">
@@ -616,13 +584,77 @@ const Sidebar: React.FC<SidebarProps> = ({
                 </div>
               </div>
 
-              <div className="bg-emerald-50 border border-emerald-100 p-3 rounded-md flex justify-between items-center">
+              <div className="bg-emerald-50 border border-emerald-100 p-3 rounded-md flex justify-between items-center mb-4">
                 <span className="text-sm text-emerald-800 font-medium">Frete Total Estimado</span>
                 <span className="text-lg font-bold text-emerald-700">
                   {freightPricePerKm && !isNaN(parseFloat(freightPricePerKm))
                     ? formatCurrency((route.totalDistance / 1000) * parseFloat(freightPricePerKm))
                     : 'R$ --'}
                 </span>
+              </div>
+
+              {/* Fuel & Profit Calculator */}
+              <div className="relative pt-4 border-t border-dashed border-gray-200">
+                {!isPremium && (
+                  <div className="absolute inset-x-0 -bottom-2 top-0 bg-white/80 backdrop-blur-[1px] z-10 flex flex-col items-center justify-center text-center p-2">
+                    <span className="text-xs font-bold text-gray-500 mb-1">Calculadora de Lucro Líquido</span>
+                    <button onClick={onUpgradeClick} className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] px-2 py-1 rounded font-bold transition">
+                      Desbloquear
+                    </button>
+                  </div>
+                )}
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  <div>
+                    <label className="text-[10px] text-gray-500 font-bold block mb-1">Consumo (km/L)</label>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      placeholder="Ex: 10"
+                      value={fuelConsumption}
+                      onChange={(e) => {
+                        setFuelConsumption(e.target.value);
+                        localStorage.setItem('fuelConsumption', e.target.value);
+                      }}
+                      className="w-full p-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-emerald-500 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-gray-500 font-bold block mb-1">Preço Combustível (R$)</label>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      placeholder="Ex: 5.50"
+                      value={fuelPrice}
+                      onChange={(e) => {
+                        setFuelPrice(e.target.value);
+                        localStorage.setItem('fuelPrice', e.target.value);
+                      }}
+                      className="w-full p-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-emerald-500 outline-none"
+                    />
+                  </div>
+                </div>
+
+                {(fuelConsumption && fuelPrice && !isNaN(parseFloat(fuelConsumption)) && !isNaN(parseFloat(fuelPrice))) && (
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center text-xs text-red-600">
+                      <span>Custo Combustível:</span>
+                      <span className="font-bold">
+                        {formatCurrency(((route.totalDistance / 1000) / parseFloat(fuelConsumption)) * parseFloat(fuelPrice))}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm text-emerald-700 bg-emerald-50 p-2 rounded border border-emerald-100">
+                      <span className="font-bold">Lucro Líquido Estimado:</span>
+                      <span className="font-bold text-lg">
+                        {freightPricePerKm && !isNaN(parseFloat(freightPricePerKm))
+                          ? formatCurrency(
+                            ((route.totalDistance / 1000) * parseFloat(freightPricePerKm)) -
+                            (((route.totalDistance / 1000) / parseFloat(fuelConsumption)) * parseFloat(fuelPrice))
+                          )
+                          : 'R$ --'}
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -750,14 +782,6 @@ const Sidebar: React.FC<SidebarProps> = ({
         </div>
       </div>
 
-      <BulkImportModal
-        isOpen={showBulkImport}
-        onClose={() => setShowBulkImport(false)}
-        onImport={(newLocs) => {
-          setLocations(prev => [...prev, ...newLocs]);
-          setShowBulkImport(false);
-        }}
-      />
     </div >
   );
 };

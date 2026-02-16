@@ -139,6 +139,7 @@ const App: React.FC = () => {
           onToggleAvoidDirt={() => setAvoidDirt(prev => !prev)}
           roundTrip={roundTrip}
           onToggleRoundTrip={() => setRoundTrip(prev => !prev)}
+          setRoundTrip={setRoundTrip} // Expose setter for auto-enable
         />
       </div>
 
