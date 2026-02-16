@@ -37,6 +37,7 @@ export interface RouteSegment {
   type: 'paved' | 'unpaved';
   distance: number; // meters
   duration: number; // seconds
+  direction?: 'outbound' | 'inbound';
 }
 
 export interface OptimizedRoute {

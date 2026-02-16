@@ -208,20 +208,78 @@ export const getOptimizedRoute = async (
     let tollCount = 0;
     const tollDetails: { lat: number; lng: number; name?: string; operator?: string; nearbyLocation?: string; }[] = [];
 
+    // --- Improved Segment Processing for Direction & Symmetry ---
+
+    // Calculate total stops (start + destinations)
+    const totalStops = stopsToProcess.length;
+
     if (trip.legs && Array.isArray(trip.legs)) {
-      trip.legs.forEach((leg: any) => {
-        if (leg.steps && Array.isArray(leg.steps)) {
-          leg.steps.forEach((step: any) => {
-            let isToll = false;
+      trip.legs.forEach((leg: any, legIndex: number) => {
 
-            if (step.maneuver && step.maneuver.type === 'toll_booth') {
-              isToll = true;
-            } else if (step.intersections && step.intersections.some((i: any) => i.classes && i.classes.includes('toll'))) {
-              isToll = true;
-            }
+        // Determine segment direction
+        // Rule:
+        // - If RoundTrip is active:
+        //   - For 2 stops (A->B->A): leg 0 is outbound, leg 1 is inbound.
+        //   - For N stops (A->B->C->A): Last leg is inbound? Or just sequential?
+        //   - User Interpretation: "Ida" = sequence to last destination. "Volta" = return to start.
+        //   - In OSRM RoundTrip: It visits all points then returns.
+        //   - So, Leg 0 to N-2 are "Outbound". Last Leg (N-1) is "Inbound" (Back to start).
 
-            if (isToll) {
-              if (step.maneuver && step.maneuver.location) {
+        let direction: 'outbound' | 'inbound' = 'outbound';
+        if (roundTrip) {
+          // If it's the last leg, it's the return trip
+          if (legIndex === trip.legs.length - 1) {
+            direction = 'inbound';
+          }
+        }
+
+        // --- Force Symmetric Return for 2-point Round Trip ---
+        // If we have exactly 2 locations (Start + 1 Dest) and RoundTrip is true:
+        // Leg 0 is Start->Dest. Leg 1 is Dest->Start.
+        // To ensure "Same Path" and "Same Mileage", we can ignore OSRM's Leg 1 geometry
+        // and simply Reverse Leg 0 geometry.
+
+        let legSegments: RouteSegment[] = [];
+
+        if (roundTrip && totalStops === 2 && legIndex === 1 && segments.length > 0) {
+          // Clone segments from Leg 0 (Outbound)
+          // This assumes segments are stored sequentially. 
+          // We need to retrieve the outbound segments.
+          // Since we push to `segments` array immediately, we can filter by 'outbound'
+          const outboundSegments = segments.filter(s => s.direction === 'outbound');
+
+          // Create reversed segments
+          // Iterate backwards through outbound segments
+          for (let i = outboundSegments.length - 1; i >= 0; i--) {
+            const seg = outboundSegments[i];
+            const reverseCoords = [...seg.coordinates].reverse();
+
+            legSegments.push({
+              coordinates: reverseCoords,
+              type: seg.type,
+              distance: seg.distance,
+              duration: seg.duration,
+              direction: 'inbound'
+            });
+          }
+
+          // Overwrite trip totals to be exactly double the outbound
+          // (This is a visual hack, but user asked for "Same Kilometragem")
+          // We might need to adjust `trip.distance` return value too at the end.
+        } else {
+          // Standard Processing
+          if (leg.steps && Array.isArray(leg.steps)) {
+            leg.steps.forEach((step: any) => {
+              // ... Toll logic (omitted, handled by existing loop if we kept it inside, but I'm replacing the block)
+              // Wait, I need to keep toll logic inside the loop or re-run it?
+              // The previous code had Toll logic mixed in. I should preserve it.
+              // For brevity, I'll extract standard processing.
+
+              let isToll = false;
+              if (step.maneuver && step.maneuver.type === 'toll_booth') isToll = true;
+              else if (step.intersections && step.intersections.some((i: any) => i.classes && i.classes.includes('toll'))) isToll = true;
+
+              if (isToll && step.maneuver && step.maneuver.location) {
                 tollDetails.push({
                   lat: step.maneuver.location[1],
                   lng: step.maneuver.location[0],
@@ -229,30 +287,30 @@ export const getOptimizedRoute = async (
                   operator: "Desconhecido"
                 });
               }
-            }
 
-            if (step.geometry && step.geometry.coordinates) {
-              const stepCoords = processCoordinates(step.geometry.coordinates);
-              const name = step.name ? step.name.toLowerCase() : '';
-              const isUnpaved =
-                name.includes('terra') ||
-                name.includes('rural') ||
-                name.includes('estrada de chão') ||
-                name.includes('não pavimentada');
+              if (step.geometry && step.geometry.coordinates) {
+                const stepCoords = processCoordinates(step.geometry.coordinates);
+                const name = step.name ? step.name.toLowerCase() : '';
+                const isUnpaved = name.includes('terra') || name.includes('rural') || name.includes('estrada de chão') || name.includes('não pavimentada');
 
-              segments.push({
-                coordinates: stepCoords,
-                type: isUnpaved ? 'unpaved' : 'paved',
-                distance: step.distance || 0,
-                duration: step.duration || 0
-              });
-            }
-          });
+                legSegments.push({
+                  coordinates: stepCoords,
+                  type: isUnpaved ? 'unpaved' : 'paved',
+                  distance: step.distance || 0,
+                  duration: step.duration || 0,
+                  direction: direction
+                });
+              }
+            });
+          }
         }
+
+        segments.push(...legSegments);
       });
     }
 
     if (segments.length === 0) {
+      // Fallback for overview geometry if no steps
       let fullCoordinates: [number, number][] = [];
       if (trip.geometry && typeof trip.geometry === 'object' && 'coordinates' in trip.geometry) {
         fullCoordinates = processCoordinates((trip.geometry as any).coordinates);
@@ -261,8 +319,18 @@ export const getOptimizedRoute = async (
         coordinates: fullCoordinates,
         type: 'paved',
         distance: trip.distance,
-        duration: trip.duration
+        duration: trip.duration,
+        direction: 'outbound' // Default
       });
+    }
+
+    // Recalculate Totals if we forced symmetry
+    if (roundTrip && totalStops === 2) {
+      // Sum segments
+      const totalDist = segments.reduce((acc, s) => acc + s.distance, 0);
+      const totalDur = segments.reduce((acc, s) => acc + s.duration, 0);
+      trip.distance = totalDist;
+      trip.duration = totalDur;
     }
 
     // --- Enhanced Toll Detection Logic (Same as before) ---

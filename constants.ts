@@ -7,5 +7,7 @@ export const COLOR_UNPAVED = '#92400e'; // Amber-800
 export const COLOR_MARKER_DEFAULT = '#ef4444'; // Red-500
 export const COLOR_MARKER_START = '#22c55e'; // Green-500
 export const COLOR_MARKER_END = '#000000'; // Black
+export const COLOR_OUTBOUND = '#3b82f6'; // Blue-500
+export const COLOR_INBOUND = '#ef4444'; // Red-500
 
 export const MOCK_USER_ID = 'user_demo_123';

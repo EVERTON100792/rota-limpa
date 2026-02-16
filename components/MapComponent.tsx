@@ -3,7 +3,7 @@ import React, { useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Polyline, Popup, useMap, LayersControl } from 'react-leaflet';
 import L from 'leaflet';
 import { OptimizedRoute, Location } from '../types';
-import { COLOR_PAVED, COLOR_UNPAVED, COLOR_MARKER_START, COLOR_MARKER_END, COLOR_MARKER_DEFAULT } from '../constants';
+import { COLOR_PAVED, COLOR_UNPAVED, COLOR_MARKER_START, COLOR_MARKER_END, COLOR_MARKER_DEFAULT, COLOR_OUTBOUND, COLOR_INBOUND } from '../constants';
 
 // Fix Leaflet default icon issue in React
 const createIcon = (color: string, content: string | number) => {
@@ -47,6 +47,12 @@ const MapComponent: React.FC<MapComponentProps> = ({
 }) => {
     const pointsToDisplay = route ? route.waypoints : locations;
 
+    const getSegmentColor = (segment: any) => {
+        if (segment.type === 'unpaved') return COLOR_UNPAVED;
+        if (segment.direction === 'inbound') return COLOR_INBOUND;
+        return COLOR_OUTBOUND; // Default or 'outbound'
+    };
+
     return (
         <div className="w-full h-full relative isolate overflow-hidden bg-gray-200">
             <MapContainer
@@ -78,7 +84,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
                         key={`route-seg-${idx}-${route.totalDistance}`}
                         positions={segment.coordinates}
                         pathOptions={{
-                            color: segment.type === 'unpaved' ? COLOR_UNPAVED : COLOR_PAVED,
+                            color: getSegmentColor(segment),
                             weight: segment.type === 'unpaved' ? 8 : 6,
                             dashArray: segment.type === 'unpaved' ? '10, 10' : undefined,
                             opacity: 0.8,
@@ -145,6 +151,27 @@ const MapComponent: React.FC<MapComponentProps> = ({
 
                 <AutoBounds route={route} />
             </MapContainer>
+
+            {/* Legenda de Rotas */}
+            {route && (
+                <div className="absolute bottom-6 left-6 z-[400] bg-white/90 p-3 rounded-lg shadow-lg text-xs flex flex-col gap-2 backdrop-blur-sm">
+                    <h4 className="font-bold text-gray-700 mb-1">Legenda da Rota</h4>
+                    <div className="flex items-center gap-2">
+                        <div className="w-6 h-1 rounded-full" style={{ backgroundColor: COLOR_OUTBOUND }}></div>
+                        <span className="text-gray-600 font-medium">Ida</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <div className="w-6 h-1 rounded-full" style={{ backgroundColor: COLOR_INBOUND }}></div>
+                        <span className="text-gray-600 font-medium">Volta</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <div className="w-6 h-1 rounded-full border border-dashed border-amber-800 bg-transparent flex items-center justify-center">
+                            <div className="w-full border-t-2 border-dashed border-amber-800"></div>
+                        </div>
+                        <span className="text-amber-800 font-medium">Não Pavimentada</span>
+                    </div>
+                </div>
+            )}
 
             {/* Attribution / Legenda pequena */}
             <div className="absolute bottom-1 right-1 z-[400] text-[10px] text-gray-500 bg-white/70 px-1 rounded pointer-events-none">
