@@ -46,17 +46,19 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                             2
                         </div>
                         <div className="space-y-2">
-                            <h3 className="font-bold text-gray-800 text-lg">Definindo Custos (Lucro Líquido)</h3>
+                            <h3 className="font-bold text-gray-800 text-lg">Definindo Veículo e Custos</h3>
                             <p className="text-sm text-gray-600 leading-relaxed">
-                                Antes de otimizar, verifique as configurações:
+                                Abra a aba <strong>"Veículo & Custos"</strong> para configurar:
                                 <br />
-                                • <strong>Consumo (km/L):</strong> Quanto seu veículo faz.
+                                • <strong>Tipo de Veículo:</strong> Selecione Fiorino, Van ou Caminhão para ter uma estimativa automática.
                                 <br />
-                                • <strong>Preço Combustível:</strong> Valor atual na bomba.
+                                • <strong>Combustível:</strong> Ajuste o preço e o consumo do seu veículo.
                                 <br />
-                                • <strong>Valor Frete:</strong> Quanto você cobra por KM rodado.
+                                • <strong>Valor Frete:</strong> Defina o valor por KM ou edite o <strong>Valor Total</strong> manualmente.
                                 <br />
-                                <span className="text-xs text-gray-500 italic block mt-1">Esses dados garantem que o cálculo do seu lucro no final do dia seja exato.</span>
+                                • <strong>Finalizar Viagem:</strong> Ao concluir, insira o <strong>KM Real</strong> para ter um relatório preciso de lucro e custos.
+                                <br />
+                                <span className="text-xs text-emerald-600 font-bold block mt-1">O sistema calculará seu Lucro Líquido automaticamente!</span>
                             </p>
                         </div>
                     </section>

@@ -9,6 +9,7 @@ import HelpModal from './components/HelpModal';
 import { Location, OptimizedRoute, Trip } from './types';
 import { getOptimizedRoute } from './services/api';
 import { Menu, X } from 'lucide-react';
+import OptimizationOverlay from './components/OptimizationOverlay';
 
 const App: React.FC = () => {
   const [locations, setLocations] = useState<Location[]>([]);
@@ -75,14 +76,23 @@ const App: React.FC = () => {
     if (locations.length < 2) return;
     setIsOptimizing(true);
 
-    // Se estiver no celular, fecha a sidebar para mostrar o resultado no mapa
-    if (isMobile) setIsSidebarOpen(false);
+    // Minimum duration for the premium animation (3.5s)
+    const minDuration = 3500;
+    const startTime = Date.now();
 
     const res = await getOptimizedRoute(locations, isPremium, avoidDirt, roundTrip);
+
+    const elapsedTime = Date.now() - startTime;
+    if (elapsedTime < minDuration) {
+      await new Promise(resolve => setTimeout(resolve, minDuration - elapsedTime));
+    }
+
     if (res) {
       setRoute(res);
       // Atualiza a lista de locations com a ordem otimizada para que a navegação siga o trajeto correto
       setLocations(res.waypoints);
+      // Se estiver no celular, fecha a sidebar APÓS a otimização para mostrar o resultado no mapa
+      if (isMobile) setIsSidebarOpen(false);
     } else {
       alert("Não foi possível calcular a rota. Verifique os endereços.");
     }
@@ -199,11 +209,8 @@ const App: React.FC = () => {
       <SettingsModal
         isOpen={showSettings}
         onClose={() => setShowSettings(false)}
-      />
-
-      <HelpModal
-        isOpen={showHelp}
-        onClose={() => setShowHelp(false)}
+        isPremium={isPremium}
+        onUpgrade={() => setShowPremiumModal(true)}
       />
 
       <TripHistoryModal
@@ -211,6 +218,14 @@ const App: React.FC = () => {
         onClose={() => setShowHistory(false)}
         onLoadTrip={handleLoadTrip}
       />
+
+      <HelpModal
+        isOpen={showHelp}
+        onClose={() => setShowHelp(false)}
+      />
+
+      {/* Premium Optimization Animation Overlay */}
+      <OptimizationOverlay isVisible={isOptimizing} />
 
     </div>
   );

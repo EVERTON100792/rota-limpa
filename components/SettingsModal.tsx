@@ -5,9 +5,11 @@ import { X, Check, Eye, EyeOff } from 'lucide-react';
 interface SettingsModalProps {
     isOpen: boolean;
     onClose: () => void;
+    isPremium?: boolean;
+    onUpgrade?: () => void;
 }
 
-const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
+const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, isPremium = false, onUpgrade }) => {
     const [orsKey, setOrsKey] = useState('');
     const [useORS, setUseORS] = useState(false);
     const [showKey, setShowKey] = useState(false);
@@ -42,6 +44,29 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                 <p className="text-sm text-gray-500 mb-6">Personalize sua experiência de roteamento.</p>
 
                 <div className="space-y-6">
+
+                    {/* Premium Status */}
+                    <div className={`${isPremium ? 'bg-gradient-to-r from-emerald-900 to-emerald-800' : 'bg-gray-100'} p-4 rounded-xl flex justify-between items-center`}>
+                        <div>
+                            <p className={`text-xs font-bold uppercase tracking-wider ${isPremium ? 'text-emerald-400' : 'text-gray-500'}`}>
+                                Seu Plano
+                            </p>
+                            <p className={`text-lg font-bold ${isPremium ? 'text-white' : 'text-gray-700'}`}>
+                                {isPremium ? 'RotaLimpa Premium' : 'Gratuito'}
+                            </p>
+                        </div>
+                        {!isPremium && onUpgrade && (
+                            <button
+                                onClick={() => {
+                                    onClose();
+                                    onUpgrade();
+                                }}
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-2 rounded-lg transition-colors shadow-lg"
+                            >
+                                FAZER UPGRADE
+                            </button>
+                        )}
+                    </div>
 
                     {/* ORS Section */}
                     <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-xl">

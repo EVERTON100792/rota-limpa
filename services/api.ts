@@ -196,12 +196,228 @@ export const getReverseGeocoding = async (lat: number, lng: number): Promise<Loc
   }
 };
 
-// --- OSRM (Routing & Optimization) ---
+// --- Helpers for Route Processing ---
 
-const processCoordinates = (coords: number[][]): [number, number][] => {
-  if (!Array.isArray(coords)) return [];
-  return coords.map(c => [c[1], c[0]]);
-};
+async function getRouteFromOSRM(locations: Location[], roundTrip: boolean, avoidDirt: boolean): Promise<any> {
+  const coordinatesString = locations.map(loc => `${loc.lng},${loc.lat}`).join(';');
+  let url = `https://router.project-osrm.org/route/v1/driving/${coordinatesString}?overview=full&geometries=geojson&steps=true`;
+
+  if (avoidDirt) {
+    url += `&exclude=ferry,unpaved`;
+  }
+
+  // For Route API, roundTrip just means we added the start node at the end manually? 
+  // No, OSRM Route API visits points in order. 
+  // If we want round trip geometry, we must append Start to end of locations list before calling this.
+  // But wait, getOptimizedRoute calls this with `newOrder`. 
+  // If `newOrder` already has Start at end? 
+  // The heuristic logic below will ensure `newOrder` is correct.
+
+  const response = await fetch(url);
+  const data = await response.json();
+  if (data.code !== 'Ok' || !data.routes || data.routes.length === 0) return null;
+  return data.routes[0];
+}
+
+async function processRouteResponse(trip: any, stopsToProcess: Location[], roundTrip: boolean, originalSegments: any[] = []) {
+  const segments: RouteSegment[] = [];
+  let tollCount = 0;
+  const tollDetails: { lat: number; lng: number; name?: string; operator?: string; nearbyLocation?: string; }[] = [];
+
+  // Calculate total stops (start + destinations)
+  const totalStops = stopsToProcess.length;
+
+  if (trip.legs && Array.isArray(trip.legs)) {
+    trip.legs.forEach((leg: any, legIndex: number) => {
+
+      let direction: 'outbound' | 'inbound' = 'outbound';
+      if (roundTrip) {
+        // If it's the last leg, it's the return trip
+        if (legIndex === trip.legs.length - 1) {
+          direction = 'inbound';
+        }
+      }
+
+      if (roundTrip && totalStops === 2 && legIndex === 1 && segments.length > 0) {
+        // Force Symmetric Return logic (same as before)
+        const outboundSegments = segments.filter(s => s.direction === 'outbound');
+        const legSegments: RouteSegment[] = [];
+        for (let i = outboundSegments.length - 1; i >= 0; i--) {
+          const seg = outboundSegments[i];
+          const reverseCoords = [...seg.coordinates].reverse();
+          legSegments.push({
+            coordinates: reverseCoords,
+            type: seg.type,
+            distance: seg.distance,
+            duration: seg.duration,
+            direction: 'inbound'
+          });
+        }
+        segments.push(...legSegments);
+      } else {
+        if (leg.steps && Array.isArray(leg.steps)) {
+          leg.steps.forEach((step: any) => {
+            let isToll = false;
+            if (step.maneuver && step.maneuver.type === 'toll_booth') isToll = true;
+            else if (step.intersections && step.intersections.some((i: any) => i.classes && i.classes.includes('toll'))) isToll = true;
+
+            if (isToll && step.maneuver && step.maneuver.location) {
+              tollDetails.push({
+                lat: step.maneuver.location[1],
+                lng: step.maneuver.location[0],
+                name: "Pedágio (OSRM)",
+                operator: "Desconhecido"
+              });
+            }
+
+            if (step.geometry && step.geometry.coordinates) {
+              const stepCoords = processCoordinates(step.geometry.coordinates);
+              const name = step.name ? step.name.toLowerCase() : '';
+              const isUnpaved = name.includes('terra') || name.includes('rural') || name.includes('estrada de chão') || name.includes('não pavimentada');
+
+              segments.push({
+                coordinates: stepCoords,
+                type: isUnpaved ? 'unpaved' : 'paved',
+                distance: step.distance || 0,
+                duration: step.duration || 0,
+                direction: direction
+              });
+            }
+          });
+        }
+      }
+    });
+  }
+
+  if (segments.length === 0) {
+    let fullCoordinates: [number, number][] = [];
+    if (trip.geometry && typeof trip.geometry === 'object' && 'coordinates' in trip.geometry) {
+      fullCoordinates = processCoordinates((trip.geometry as any).coordinates);
+    }
+    segments.push({
+      coordinates: fullCoordinates,
+      type: 'paved',
+      distance: trip.distance,
+      duration: trip.duration,
+      direction: 'outbound'
+    });
+  }
+
+  // Recalculate Totals if we forced symmetry
+  if (roundTrip && totalStops === 2) {
+    const totalDist = segments.reduce((acc, s) => acc + s.distance, 0);
+    const totalDur = segments.reduce((acc, s) => acc + s.duration, 0);
+    trip.distance = totalDist;
+    trip.duration = totalDur;
+  }
+
+  // --- Enhanced Toll Detection Logic (Overpass) ---
+  try {
+    // Logic assumes `stopsToProcess` are the ordered locations
+    const bounds = getBoundsFromCoordinates(stopsToProcess);
+    const south = bounds.minLat - 0.05;
+    const west = bounds.minLng - 0.05;
+    const north = bounds.maxLat + 0.05;
+    const east = bounds.maxLng + 0.05;
+
+    const overpassQuery = `[out:json][timeout:5];
+            (
+              node["barrier"="toll_booth"](${south},${west},${north},${east});
+              node["toll:type"](${south},${west},${north},${east});
+            );
+            out body;`;
+
+    const overpassUrl = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(overpassQuery)}`;
+    const opRes = await fetch(overpassUrl);
+    const opData = await opRes.json();
+
+    if (opData && opData.elements) {
+      const routePath = segments.flatMap(s => s.coordinates);
+      const overpassTolls: { lat: number; lng: number; name?: string; operator?: string; nearbyLocation?: string; }[] = [];
+
+      opData.elements.forEach((el: any) => {
+        const tollLat = el.lat;
+        const tollLng = el.lon;
+
+        if (isPointNearPolyline([tollLat, tollLng], routePath, 0.001)) {
+          const isDuplicate = overpassTolls.some(existing =>
+            calculateDistance(existing.lat, existing.lng, tollLat, tollLng) < 0.2
+          );
+
+          if (!isDuplicate) {
+            overpassTolls.push({
+              lat: tollLat,
+              lng: tollLng,
+              name: el.tags?.name || "Pedágio",
+              operator: el.tags?.operator
+            });
+          }
+        }
+      });
+
+      const uniqueOsrmTolls = tollDetails.filter(osrmToll => {
+        return !overpassTolls.some(opToll =>
+          calculateDistance(osrmToll.lat, osrmToll.lng, opToll.lat, opToll.lng) < 0.5
+        );
+      });
+
+      tollDetails.length = 0;
+      tollDetails.push(...overpassTolls, ...uniqueOsrmTolls);
+    }
+  } catch (err) {
+    console.warn("Overpass API failed (using OSRM fallback):", err);
+  }
+
+  tollCount = tollDetails.length;
+
+  // --- Reverse Geocoding for Tolls ---
+  const uniqueTolls = tollDetails;
+
+  await Promise.all(uniqueTolls.map(async (toll) => {
+    try {
+      const locationData = await getReverseGeocoding(toll.lat, toll.lng);
+      if (locationData && locationData.address) {
+        const city = locationData.address.city || locationData.address.town || locationData.address.village || locationData.address.municipality;
+        if (city) {
+          toll.nearbyLocation = city;
+          return;
+        }
+      }
+
+      let closestDist = Infinity;
+      let closestCity = "";
+      stopsToProcess.forEach(wp => { // Using ordered stops
+        const d = calculateDistance(toll.lat, toll.lng, wp.lat, wp.lng);
+        if (d < closestDist) {
+          closestDist = d;
+          const addr = wp.address || {};
+          closestCity = addr.city || addr.town || addr.village || addr.municipality || "";
+          if (!closestCity && wp.name && !/\d/.test(wp.name) && !wp.name.includes(',')) {
+            closestCity = wp.name;
+          }
+        }
+      });
+      toll.nearbyLocation = closestCity ? `Próximo a ${closestCity}` : `Aprox. ${Math.round(closestDist)}km`;
+
+    } catch (e) {
+      console.warn("Toll Reverse Geocode Failed", e);
+      toll.nearbyLocation = "Local Desconhecido";
+    }
+  }));
+
+  return {
+    totalDistance: trip.distance,
+    totalDuration: trip.duration,
+    totalAmount: 0, // Placeholder, calculated in frontend
+    segments: segments,
+    waypoints: stopsToProcess,
+    tollCount: tollCount,
+    tollDetails: tollDetails
+  };
+}
+
+
+// --- Main Function ---
 
 export const getOptimizedRoute = async (
   locations: Location[],
@@ -215,40 +431,23 @@ export const getOptimizedRoute = async (
 
   if (stopsToProcess.length < 2) return null;
 
-  // --- ORS Hybrid Logic ---
+  // --- ORS Hybrid Logic (unchanged) ---
   const useORS = StorageService.getUseORS();
   const orsKey = StorageService.getORSKey();
 
   if (useORS && orsKey && avoidDirt) { // Only force ORS if avoidDirt is requested, as it's the main selling point
     console.log("Using OpenRouteService for Dirt Avoidance...");
     try {
-      // Note: ORS Directions does NOT reorder (TSP).
-      // Strategy: Use OSRM to get Order, THEN ORS for path?
-      // For now, to keep it simple and robust:
-      // If the user enabled ORS, we use ORS. If they need optimization, they should trust ORS path or 
-      // we assume they manually ordered it/we trust OSRM order logic from a previous step?
-      // Let's implement the FULL HYBRID:
-      // 1. Get Optimized Order from OSRM (Trip API) - Fast & Good TSP.
-      // 2. Use that Order to request ORS (Directions API) - Good Dirt Avoidance.
-
-      // Step 1: OSRM Optimization (Order Only)
       const osrmResult = await getOSRMMatrix(stopsToProcess, roundTrip);
       const orderedLocations = osrmResult.orderedLocations;
-
-      // Step 2: ORS Pathing (Geometry + Fidelity)
       const orsRoute = await getOptimizedRouteORS(orderedLocations, orsKey, avoidDirt);
-      if (orsRoute) {
-        // Merge details? ORS lacks tolls.
-        // We can run the Overpass Toll check on the ORS route geometry!
-        // For now, let's just return ORS route.
-        return orsRoute;
-      }
+      if (orsRoute) return orsRoute;
     } catch (e) {
       console.warn("ORS Failed, falling back to OSRM", e);
     }
   }
 
-  // --- Standard OSRM Logic (Fallback/Default) ---
+  // --- Standard OSRM Logic ---
   const coordinatesString = stopsToProcess
     .map(loc => `${loc.lng},${loc.lat}`)
     .join(';');
@@ -268,7 +467,7 @@ export const getOptimizedRoute = async (
       throw new Error("Could not calculate route");
     }
 
-    const trip = data.trips[0];
+    let trip = data.trips[0];
     const waypoints = data.waypoints;
 
     let orderedLocations: Location[] = [];
@@ -284,257 +483,51 @@ export const getOptimizedRoute = async (
       });
     }
 
-    const segments: RouteSegment[] = [];
-    let tollCount = 0;
-    const tollDetails: { lat: number; lng: number; name?: string; operator?: string; nearbyLocation?: string; }[] = [];
+    // --- Closest First Heuristic (Fix for Counter-Intuitive Round Trips) ---
+    // If Round Trip, OSRM might give Start -> Far -> Close -> Start.
+    // User prefers Start -> Close -> Far -> Start.
+    if (roundTrip && orderedLocations.length >= 3) {
+      const start = orderedLocations[0];
+      const first = orderedLocations[1];
+      const last = orderedLocations[orderedLocations.length - 1]; // This is the last stop visited before returning to start
 
-    // --- Improved Segment Processing for Direction & Symmetry ---
+      const distFirst = calculateDistance(start.lat, start.lng, first.lat, first.lng);
+      const distLast = calculateDistance(start.lat, start.lng, last.lat, last.lng);
 
-    // Calculate total stops (start + destinations)
-    const totalStops = stopsToProcess.length;
+      // If First is significantly further than Last (e.g. 20% further), prefer Last first.
+      if (distFirst > distLast * 1.2) {
+        console.log("Heuristic: Reversing route to visit closest stop first.");
+        // Reverse the order of destinations (keep Start date 0)
+        // Original: Start, A, B, C
+        // Reverse dests: Start, C, B, A
+        // We must also append Start to the end for the Route API to close the loop?
+        // NO, OSRM Trip logic implies A->B->C->Start. 
+        // If we use Route API, we MUST explicitly add Start at the end for a loop.
 
-    if (trip.legs && Array.isArray(trip.legs)) {
-      trip.legs.forEach((leg: any, legIndex: number) => {
+        const reversedDestinations = [...orderedLocations.slice(1)].reverse();
+        const newOrder = [orderedLocations[0], ...reversedDestinations, orderedLocations[0]]; // Explicit Close Loop
 
-        // Determine segment direction
-        // Rule:
-        // - If RoundTrip is active:
-        //   - For 2 stops (A->B->A): leg 0 is outbound, leg 1 is inbound.
-        //   - For N stops (A->B->C->A): Last leg is inbound? Or just sequential?
-        //   - User Interpretation: "Ida" = sequence to last destination. "Volta" = return to start.
-        //   - In OSRM RoundTrip: It visits all points then returns.
-        //   - So, Leg 0 to N-2 are "Outbound". Last Leg (N-1) is "Inbound" (Back to start).
-
-        let direction: 'outbound' | 'inbound' = 'outbound';
-        if (roundTrip) {
-          // If it's the last leg, it's the return trip
-          if (legIndex === trip.legs.length - 1) {
-            direction = 'inbound';
-          }
+        // Request Route Geometry for this forced order
+        const altRoute = await getRouteFromOSRM(newOrder, false, avoidDirt); // roundTrip=false for Route API as we manually closed loop
+        if (altRoute) {
+          trip = altRoute;
+          // For Route API, trip.legs usually matches steps.
+          // We also need to update orderedLocations to match the newOrder (excluding the final start duplicate)
+          orderedLocations = [orderedLocations[0], ...reversedDestinations];
         }
-
-        // --- Force Symmetric Return for 2-point Round Trip ---
-        // If we have exactly 2 locations (Start + 1 Dest) and RoundTrip is true:
-        // Leg 0 is Start->Dest. Leg 1 is Dest->Start.
-        // To ensure "Same Path" and "Same Mileage", we can ignore OSRM's Leg 1 geometry
-        // and simply Reverse Leg 0 geometry.
-
-        let legSegments: RouteSegment[] = [];
-
-        if (roundTrip && totalStops === 2 && legIndex === 1 && segments.length > 0) {
-          // Clone segments from Leg 0 (Outbound)
-          // This assumes segments are stored sequentially. 
-          // We need to retrieve the outbound segments.
-          // Since we push to `segments` array immediately, we can filter by 'outbound'
-          const outboundSegments = segments.filter(s => s.direction === 'outbound');
-
-          // Create reversed segments
-          // Iterate backwards through outbound segments
-          for (let i = outboundSegments.length - 1; i >= 0; i--) {
-            const seg = outboundSegments[i];
-            const reverseCoords = [...seg.coordinates].reverse();
-
-            legSegments.push({
-              coordinates: reverseCoords,
-              type: seg.type,
-              distance: seg.distance,
-              duration: seg.duration,
-              direction: 'inbound'
-            });
-          }
-
-          // Overwrite trip totals to be exactly double the outbound
-          // (This is a visual hack, but user asked for "Same Kilometragem")
-          // We might need to adjust `trip.distance` return value too at the end.
-        } else {
-          // Standard Processing
-          if (leg.steps && Array.isArray(leg.steps)) {
-            leg.steps.forEach((step: any) => {
-              // ... Toll logic (omitted, handled by existing loop if we kept it inside, but I'm replacing the block)
-              // Wait, I need to keep toll logic inside the loop or re-run it?
-              // The previous code had Toll logic mixed in. I should preserve it.
-              // For brevity, I'll extract standard processing.
-
-              let isToll = false;
-              if (step.maneuver && step.maneuver.type === 'toll_booth') isToll = true;
-              else if (step.intersections && step.intersections.some((i: any) => i.classes && i.classes.includes('toll'))) isToll = true;
-
-              if (isToll && step.maneuver && step.maneuver.location) {
-                tollDetails.push({
-                  lat: step.maneuver.location[1],
-                  lng: step.maneuver.location[0],
-                  name: "Pedágio (OSRM)",
-                  operator: "Desconhecido"
-                });
-              }
-
-              if (step.geometry && step.geometry.coordinates) {
-                const stepCoords = processCoordinates(step.geometry.coordinates);
-                const name = step.name ? step.name.toLowerCase() : '';
-                const isUnpaved = name.includes('terra') || name.includes('rural') || name.includes('estrada de chão') || name.includes('não pavimentada');
-
-                legSegments.push({
-                  coordinates: stepCoords,
-                  type: isUnpaved ? 'unpaved' : 'paved',
-                  distance: step.distance || 0,
-                  duration: step.duration || 0,
-                  direction: direction
-                });
-              }
-            });
-          }
-        }
-
-        segments.push(...legSegments);
-      });
-    }
-
-    if (segments.length === 0) {
-      // Fallback for overview geometry if no steps
-      let fullCoordinates: [number, number][] = [];
-      if (trip.geometry && typeof trip.geometry === 'object' && 'coordinates' in trip.geometry) {
-        fullCoordinates = processCoordinates((trip.geometry as any).coordinates);
       }
-      segments.push({
-        coordinates: fullCoordinates,
-        type: 'paved',
-        distance: trip.distance,
-        duration: trip.duration,
-        direction: 'outbound' // Default
-      });
     }
 
-    // Recalculate Totals if we forced symmetry
-    if (roundTrip && totalStops === 2) {
-      // Sum segments
-      const totalDist = segments.reduce((acc, s) => acc + s.distance, 0);
-      const totalDur = segments.reduce((acc, s) => acc + s.duration, 0);
-      trip.distance = totalDist;
-      trip.duration = totalDur;
-    }
-
-    // --- Enhanced Toll Detection Logic (Same as before) ---
-    // (Preserving logic for Overpass API call... simplified for brevity in this replace block, 
-    // but implies we should keep the existing helper logic separate if reusing. 
-    // Since I am replacing the whole file, I will rewrite the Overpass logic here.)
-
-    try {
-      const bounds = getBoundsFromCoordinates(orderedLocations.filter(l => l) as Location[]);
-      const south = bounds.minLat - 0.05;
-      const west = bounds.minLng - 0.05;
-      const north = bounds.maxLat + 0.05;
-      const east = bounds.maxLng + 0.05;
-
-      const overpassQuery = `[out:json][timeout:5];
-            (
-              node["barrier"="toll_booth"](${south},${west},${north},${east});
-              node["toll:type"](${south},${west},${north},${east});
-            );
-            out body;`;
-
-      const overpassUrl = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(overpassQuery)}`;
-      const opRes = await fetch(overpassUrl);
-      const opData = await opRes.json();
-
-      if (opData && opData.elements) {
-        const routePath = segments.flatMap(s => s.coordinates);
-        const overpassTolls: { lat: number; lng: number; name?: string; operator?: string; nearbyLocation?: string; }[] = [];
-
-        opData.elements.forEach((el: any) => {
-          const tollLat = el.lat;
-          const tollLng = el.lon;
-
-          if (isPointNearPolyline([tollLat, tollLng], routePath, 0.001)) {
-            const isDuplicate = overpassTolls.some(existing =>
-              calculateDistance(existing.lat, existing.lng, tollLat, tollLng) < 0.2
-            );
-
-            if (!isDuplicate) {
-              overpassTolls.push({
-                lat: tollLat,
-                lng: tollLng,
-                name: el.tags?.name || "Pedágio",
-                operator: el.tags?.operator
-              });
-            }
-          }
-        });
-
-        const uniqueOsrmTolls = tollDetails.filter(osrmToll => {
-          return !overpassTolls.some(opToll =>
-            calculateDistance(osrmToll.lat, osrmToll.lng, opToll.lat, opToll.lng) < 0.5
-          );
-        });
-
-        tollDetails.length = 0;
-        tollDetails.push(...overpassTolls, ...uniqueOsrmTolls);
-      }
-    } catch (err) {
-      console.warn("Overpass API failed (using OSRM fallback):", err);
-    }
-
-    tollCount = tollDetails.length;
-    const validWaypoints = orderedLocations.filter(l => l !== undefined);
-
-    // --- Accurate City Naming via Reverse Geocoding ---
-    // User Feedback: "Proximo a Rolandia" was wrong, should be "Jataizinho".
-    // Old logic only checked distance to Waypoints. New logic: Reverse Geocode the TOLL itself.
-
-    // We limit this to avoid rate limits if there are huge numbers of tolls, 
-    // but typically a route has < 10 tolls.
-    const uniqueTolls = tollDetails; // already deduped above
-
-    await Promise.all(uniqueTolls.map(async (toll) => {
-      try {
-        // 1. Try to get City from Overpass Tags (if we had them here, but we normalized `tollDetails` structure)
-        // Since we don't store raw tags in `tollDetails`, we skip to Reverse Geocoding.
-
-        // 2. Reverse Geocode the Toll Location
-        // Use a slight delay or just run parallel (Nominatim might rate limit, but usually fine for small batches)
-        const locationData = await getReverseGeocoding(toll.lat, toll.lng);
-
-        if (locationData && locationData.address) {
-          const city = locationData.address.city || locationData.address.town || locationData.address.village || locationData.address.municipality;
-          if (city) {
-            toll.nearbyLocation = city; // Direct City Name: "Jataizinho"
-            return;
-          }
-        }
-
-        // 3. Fallback: Distance to closest Waypoint (Old Logic)
-        let closestDist = Infinity;
-        let closestCity = "";
-        validWaypoints.forEach(wp => {
-          const d = calculateDistance(toll.lat, toll.lng, wp.lat, wp.lng);
-          if (d < closestDist) {
-            closestDist = d;
-            const addr = wp.address || {};
-            closestCity = addr.city || addr.town || addr.village || addr.municipality || "";
-            if (!closestCity && wp.name && !/\d/.test(wp.name) && !wp.name.includes(',')) {
-              closestCity = wp.name;
-            }
-          }
-        });
-        toll.nearbyLocation = closestCity ? `Próximo a ${closestCity}` : `Aprox. ${Math.round(closestDist)}km`;
-
-      } catch (e) {
-        console.warn("Toll Reverse Geocode Failed", e);
-        toll.nearbyLocation = "Local Desconhecido";
-      }
-    }));
+    // Process Segments using the (potentially new) trip and ordered locations
+    const processed = await processRouteResponse(trip, orderedLocations, roundTrip);
 
     // --- Round Trip Visual Fix: Append Start to Waypoints ---
-    // User wants the "Finish Flag" (Checkered) at the Start Location for Round Trips.
-    // MapComponent uses the last waypoint for the flag.
+    const validWaypoints = processed.waypoints;
     if (roundTrip && validWaypoints.length > 0) {
-      // Check if the last waypoint is already the start (OSRM usually doesn't do this for 'waypoints' array)
       const startNode = validWaypoints[0];
       const lastNode = validWaypoints[validWaypoints.length - 1];
-
-      // If last node is not physically the start node (approx check)
       const dist = calculateDistance(startNode.lat, startNode.lng, lastNode.lat, lastNode.lng);
       if (dist > 0.1) {
-        // Append a distinct copy of the start node as the "Arrival" point
         validWaypoints.push({
           ...startNode,
           name: "Retorno ao Início",
@@ -543,14 +536,7 @@ export const getOptimizedRoute = async (
       }
     }
 
-    return {
-      totalDistance: trip.distance,
-      totalDuration: trip.duration,
-      segments: segments,
-      waypoints: validWaypoints,
-      tollCount: tollCount,
-      tollDetails: tollDetails
-    };
+    return processed;
 
   } catch (error) {
     console.error("Routing error details:", error);
@@ -558,7 +544,7 @@ export const getOptimizedRoute = async (
   }
 };
 
-// --- Helpers ---
+// --- Helpers (unchanged) ---
 
 // Split extraction for reuse
 async function getOSRMMatrix(locations: Location[], roundTrip: boolean) {
@@ -616,3 +602,8 @@ function isPointNearPolyline(point: [number, number], polyline: [number, number]
   }
   return false;
 }
+
+export const processCoordinates = (coords: number[][]): [number, number][] => {
+  if (!Array.isArray(coords)) return [];
+  return coords.map(c => [c[1], c[0]]);
+};
