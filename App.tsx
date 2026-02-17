@@ -78,6 +78,8 @@ const App: React.FC = () => {
     const res = await getOptimizedRoute(locations, isPremium, avoidDirt, roundTrip);
     if (res) {
       setRoute(res);
+      // Atualiza a lista de locations com a ordem otimizada para que a navegação siga o trajeto correto
+      setLocations(res.waypoints);
     } else {
       alert("Não foi possível calcular a rota. Verifique os endereços.");
     }

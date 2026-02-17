@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Location } from '../types';
-import { Trash2, Pencil, CheckCircle, MapPin, Play, Flag } from 'lucide-react';
+import { Trash2, Pencil, CheckCircle, MapPin, Play, Flag, Navigation } from 'lucide-react';
 import { searchLocation } from '../services/api';
 
 interface LocationItemProps {
@@ -93,8 +93,8 @@ const LocationItem: React.FC<LocationItemProps> = ({ loc, index, isLast, isFirst
                     ) : (
                         <>
                             <div className="flex items-center justify-between">
-                                <p className="text-sm font-semibold text-gray-800 truncate leading-tight">
-                                    {loc.name.split(',')[0]}
+                                <p className="text-sm font-semibold text-gray-800 truncate leading-tight" title={loc.name}>
+                                    {loc.name}
                                 </p>
                             </div>
 
@@ -130,6 +130,25 @@ const LocationItem: React.FC<LocationItemProps> = ({ loc, index, isLast, isFirst
                             >
                                 <Trash2 size={14} />
                             </button>
+                            <div className="h-px bg-gray-100 my-0.5" />
+                            <a
+                                href={`https://www.google.com/maps/dir/?api=1&destination=${loc.lat},${loc.lng}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-gray-300 hover:text-blue-600 hover:bg-blue-50 p-1.5 rounded-lg transition-colors flex items-center justify-center"
+                                title="Google Maps"
+                            >
+                                <MapPin size={14} />
+                            </a>
+                            <a
+                                href={`https://waze.com/ul?ll=${loc.lat},${loc.lng}&navigate=yes`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-gray-300 hover:text-cyan-500 hover:bg-cyan-50 p-1.5 rounded-lg transition-colors flex items-center justify-center"
+                                title="Waze"
+                            >
+                                <Navigation size={14} />
+                            </a>
                         </>
                     )}
                 </div>

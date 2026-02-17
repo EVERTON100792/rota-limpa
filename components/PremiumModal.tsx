@@ -15,22 +15,22 @@ const PremiumModal: React.FC<PremiumModalProps> = ({ isOpen, onClose, onConfirm,
 
   if (showDevCode) {
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in">
         <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[80vh] flex flex-col shadow-2xl">
           <div className="p-6 border-b border-gray-100 flex justify-between items-center">
             <h2 className="text-2xl font-bold text-gray-900">Configuração Backend (Dev)</h2>
             <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full"><X /></button>
           </div>
           <div className="p-6 overflow-y-auto bg-gray-50 font-mono text-sm flex-1">
-             <h3 className="font-bold text-purple-700 mb-2">// 1. Supabase SQL Setup</h3>
-             <pre className="bg-slate-800 text-slate-200 p-4 rounded mb-6 overflow-x-auto whitespace-pre-wrap">
-                {SQL_SETUP_SCRIPT || "Carregando script..."}
-             </pre>
+            <h3 className="font-bold text-purple-700 mb-2">// 1. Supabase SQL Setup</h3>
+            <pre className="bg-slate-800 text-slate-200 p-4 rounded mb-6 overflow-x-auto whitespace-pre-wrap">
+              {SQL_SETUP_SCRIPT || "Carregando script..."}
+            </pre>
 
-             <h3 className="font-bold text-purple-700 mb-2">// 2. Stripe Integration (Node.js)</h3>
-             <pre className="bg-slate-800 text-slate-200 p-4 rounded overflow-x-auto whitespace-pre-wrap">
-                {STRIPE_INTEGRATION_CODE || "Carregando código..."}
-             </pre>
+            <h3 className="font-bold text-purple-700 mb-2">// 2. Stripe Integration (Node.js)</h3>
+            <pre className="bg-slate-800 text-slate-200 p-4 rounded overflow-x-auto whitespace-pre-wrap">
+              {STRIPE_INTEGRATION_CODE || "Carregando código..."}
+            </pre>
           </div>
         </div>
       </div>
@@ -38,14 +38,14 @@ const PremiumModal: React.FC<PremiumModalProps> = ({ isOpen, onClose, onConfirm,
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in">
+    <div className="fixed inset-0 z-[4000] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in">
       <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl transform transition-all">
-        
+
         {/* Header Image/Gradient */}
         <div className="bg-gradient-to-r from-gray-900 to-emerald-900 p-8 text-center text-white relative overflow-hidden">
           {/* Simple pattern overlay using CSS radial gradient instead of external image to prevent load errors */}
-          <div className="absolute top-0 left-0 w-full h-full opacity-20" style={{backgroundImage: 'radial-gradient(circle, #ffffff 1px, transparent 1px)', backgroundSize: '20px 20px'}}></div>
-          
+          <div className="absolute top-0 left-0 w-full h-full opacity-20" style={{ backgroundImage: 'radial-gradient(circle, #ffffff 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
+
           <div className="relative z-10">
             <div className="mx-auto bg-yellow-400 text-gray-900 w-16 h-16 rounded-full flex items-center justify-center mb-4 shadow-lg">
               <Star size={32} fill="currentColor" />
@@ -53,7 +53,7 @@ const PremiumModal: React.FC<PremiumModalProps> = ({ isOpen, onClose, onConfirm,
             <h2 className="text-3xl font-bold">RotaLimpa Premium</h2>
             <p className="text-emerald-200 mt-2">Chegue seguro, evite o barro.</p>
           </div>
-          <button 
+          <button
             onClick={onClose}
             className="absolute top-4 right-4 text-white/70 hover:text-white"
           >
@@ -85,8 +85,8 @@ const PremiumModal: React.FC<PremiumModalProps> = ({ isOpen, onClose, onConfirm,
                 <p className="text-3xl font-bold text-gray-900">R$ 14,90<span className="text-sm font-normal text-gray-500">/mês</span></p>
               </div>
             </div>
-            
-            <button 
+
+            <button
               onClick={onConfirm}
               className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 rounded-xl shadow-lg hover:shadow-xl transition transform active:scale-95 flex justify-center items-center gap-2"
             >
