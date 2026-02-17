@@ -4,6 +4,8 @@ const KEYS = {
     TRIPS: 'rota_limpa_trips',
     ORS_KEY: 'rota_limpa_ors_key',
     USE_ORS: 'rota_limpa_use_ors',
+    GOOGLE_KEY: 'rota_limpa_google_key',
+    USE_GOOGLE: 'rota_limpa_use_google',
     FREIGHT_PRICE: 'freightPricePerKm'
 };
 
@@ -45,6 +47,23 @@ export const StorageService = {
 
     getUseORS: (): boolean => {
         const val = localStorage.getItem(KEYS.USE_ORS);
+        return val ? JSON.parse(val) : false;
+    },
+
+    setGoogleKey: (key: string) => {
+        localStorage.setItem(KEYS.GOOGLE_KEY, key);
+    },
+
+    getGoogleKey: (): string => {
+        return localStorage.getItem(KEYS.GOOGLE_KEY) || '';
+    },
+
+    setUseGoogle: (use: boolean) => {
+        localStorage.setItem(KEYS.USE_GOOGLE, JSON.stringify(use));
+    },
+
+    getUseGoogle: (): boolean => {
+        const val = localStorage.getItem(KEYS.USE_GOOGLE);
         return val ? JSON.parse(val) : false;
     },
 

@@ -163,6 +163,19 @@ const App: React.FC = () => {
           onStopNavigation={() => { }}
           onRecalculate={async () => { }}
           onOffRouteDetected={() => { }}
+          onUpdateLocation={(index, newLoc) => {
+            const newLocations = [...locations];
+            newLocations[index] = newLoc;
+            setLocations(newLocations);
+            // If we drag a pin, the current route is invalid. Force re-optimization or clear it.
+            if (route) {
+              // Optional: Auto-recalculate? Or just clear and warn.
+              // User wants precision. Let's clear route to force them to click "Optimize" again with new coords, 
+              // OR just update the route state if we could. 
+              // Simple approach: Clear route to avoid visual glich (path pointing to old coord).
+              setRoute(null);
+            }
+          }}
         />
       </div>
 

@@ -3,8 +3,56 @@ import { MAX_FREE_STOPS } from '../constants';
 import { getOptimizedRouteORS } from './orsApi';
 import { StorageService } from './storage';
 
+// --- Photon (Komoot) - Free, No Key, Good Text Search ---
+const searchLocationPhoton = async (query: string): Promise<Location[]> => {
+  if (!query) return [];
+  try {
+    // Photon optimized for Brazil
+    const response = await fetch(
+      `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=10&lat=-14.2350&lon=-51.9253&lang=pt`
+    );
+    const data = await response.json();
+
+    return data.features.map((item: any) => {
+      const props = item.properties;
+      const coords = item.geometry.coordinates;
+
+      const street = props.street || "";
+      const number = props.housenumber || "";
+      const city = props.city || props.town || props.village || "";
+      const state = props.state || "";
+      const postcode = props.postcode || "";
+
+      let mainName = props.name;
+      if (!mainName || mainName === street) {
+        if (street) mainName = `${street}${number ? ', ' + number : ''}`;
+        else mainName = city;
+      }
+
+      return {
+        lat: coords[1],
+        lng: coords[0],
+        originalLat: coords[1],
+        originalLng: coords[0],
+        name: mainName,
+        display_name: `${mainName} - ${city}, ${state}`, // Simplified display
+        address: {
+          street,
+          number,
+          city,
+          state,
+          postcode
+        }
+      };
+    });
+  } catch (error) {
+    console.error("Photon Geocoding error:", error);
+    return [];
+  }
+};
+
 // --- Nominatim (OpenStreetMap Geocoding) ---
-export const searchLocation = async (query: string): Promise<Location[]> => {
+const searchLocationNominatim = async (query: string): Promise<Location[]> => {
   if (!query) return [];
   try {
     const response = await fetch(
@@ -41,8 +89,8 @@ export const searchLocation = async (query: string): Promise<Location[]> => {
       return {
         lat: lat,
         lng: lng,
-        originalLat: lat, // Persist exact geocode
-        originalLng: lng, // Persist exact geocode
+        originalLat: lat,
+        originalLng: lng,
         name: mainName,
         display_name: item.display_name,
         address: {
@@ -53,13 +101,6 @@ export const searchLocation = async (query: string): Promise<Location[]> => {
           postcode
         }
       };
-    }).sort((a: any, b: any) => {
-      // Prioritize results that have a house number if the query looks like it has a number
-      const hasNumberA = !!a.address.number;
-      const hasNumberB = !!b.address.number;
-      if (hasNumberA && !hasNumberB) return -1;
-      if (!hasNumberA && hasNumberB) return 1;
-      return 0;
     }).filter((loc: any) => {
       const key = `${loc.lat.toFixed(4)}-${loc.lng.toFixed(4)}`;
       if (seen.has(key)) return false;
@@ -71,6 +112,38 @@ export const searchLocation = async (query: string): Promise<Location[]> => {
     console.error("Geocoding error:", error);
     return [];
   }
+};
+
+export const searchLocation = async (query: string): Promise<Location[]> => {
+  // Strategy: Run both Photon (faster, better fuzzy) and Nominatim (structured)
+  // Combine results, prioritizing those with HOUSE NUMBERS if the query has a number.
+
+  const hasNumberQuery = /\d+/.test(query);
+
+  const [nominatimRes, photonRes] = await Promise.all([
+    searchLocationNominatim(query),
+    searchLocationPhoton(query)
+  ]);
+
+  // Merge and Dedupe
+  const combined = [...photonRes, ...nominatimRes];
+  const seen = new Set();
+  const unique = combined.filter(l => {
+    const k = `${l.lat.toFixed(4)},${l.lng.toFixed(4)}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+
+  // Sort: Prioritize House Numbers if query had one
+  return unique.sort((a, b) => {
+    if (!hasNumberQuery) return 0;
+    const aHasNum = !!a.address.number;
+    const bHasNum = !!b.address.number;
+    if (aHasNum && !bHasNum) return -1;
+    if (!aHasNum && bHasNum) return 1;
+    return 0;
+  });
 };
 
 export const getReverseGeocoding = async (lat: number, lng: number): Promise<Location | null> => {

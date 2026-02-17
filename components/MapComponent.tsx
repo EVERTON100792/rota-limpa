@@ -40,10 +40,11 @@ interface MapComponentProps {
     onStopNavigation: () => void;
     onRecalculate: () => Promise<void>;
     onOffRouteDetected: (currentLat: number, currentLng: number) => void;
+    onUpdateLocation?: (index: number, newLoc: Location) => void;
 }
 
 const MapComponent: React.FC<MapComponentProps> = ({
-    route, locations, isPremium
+    route, locations, isPremium, onUpdateLocation
 }) => {
     const pointsToDisplay = route ? route.waypoints : locations;
 
@@ -64,16 +65,22 @@ const MapComponent: React.FC<MapComponentProps> = ({
                 attributionControl={false}
             >
                 <LayersControl position="topright">
-                    <LayersControl.BaseLayer checked name="Mapa Rodoviário">
+                    <LayersControl.BaseLayer checked name="Mapa Premium (CartoDB)">
+                        <TileLayer
+                            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+                            url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+                        />
+                    </LayersControl.BaseLayer>
+                    <LayersControl.BaseLayer name="Satélite (Google)">
+                        <TileLayer
+                            attribution='&copy; Google Maps'
+                            url="http://mt0.google.com/vt/lyrs=y&hl=en&x={x}&y={y}&z={z}"
+                        />
+                    </LayersControl.BaseLayer>
+                    <LayersControl.BaseLayer name="OpenStreetMap (Padrão)">
                         <TileLayer
                             attribution='&copy; OpenStreetMap'
                             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                        />
-                    </LayersControl.BaseLayer>
-                    <LayersControl.BaseLayer name="Satélite">
-                        <TileLayer
-                            attribution='Tiles &copy; Esri'
-                            url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
                         />
                     </LayersControl.BaseLayer>
                 </LayersControl>
@@ -108,16 +115,37 @@ const MapComponent: React.FC<MapComponentProps> = ({
                         content = '🏁'; // Checkered Flag symbol
                     }
 
+                    const eventHandlers = {
+                        dragend(e: any) {
+                            if (onUpdateLocation) {
+                                const marker = e.target;
+                                const position = marker.getLatLng();
+                                if (position) {
+                                    onUpdateLocation(idx, {
+                                        ...loc,
+                                        lat: position.lat,
+                                        lng: position.lng,
+                                        name: `${loc.name} (Ajustado)`
+                                    });
+                                }
+                            }
+                        },
+                    };
+
                     return (
                         <Marker
                             key={`${loc.lat}-${loc.lng}-${idx}`}
                             position={[loc.lat, loc.lng]}
                             icon={createIcon(color, content)}
+                            draggable={true}
+                            eventHandlers={eventHandlers}
                         >
                             <Popup>
                                 <strong>{loc.name}</strong>
                                 <br />
                                 {loc.display_name}
+                                <br />
+                                <span className="text-xs text-blue-600 italic">Arraste para corrigir</span>
                             </Popup>
                         </Marker>
                     );

@@ -740,6 +740,26 @@ const Sidebar: React.FC<SidebarProps> = ({
             </button>
           </div>
 
+          {!isOptimizing && route && locations.length > 0 && (
+            <button
+              onClick={() => {
+                // Waze Deep Link for the FIRST stop or destination?
+                // Waze is tricky with multi-stop. We typically send to the final destination 
+                // OR we try to send 'search' query.
+                // Best effort: Navigate to the *Next Stop* (index 0 if array is [origin, stop1, ...])?
+                // Usually 'locations' [0] is origin. [1] is first destination.
+                // Let's send to the first destination.
+                if (locations.length > 1) {
+                  const dest = locations[1]; // First stop after origin
+                  window.open(`https://waze.com/ul?ll=${dest.lat},${dest.lng}&navigate=yes`, '_blank');
+                }
+              }}
+              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-sm bg-cyan-50 text-cyan-700 hover:bg-cyan-100 transition-colors border border-cyan-200"
+            >
+              <Navigation size={16} /> Navegar com Waze (Próxima Parada)
+            </button>
+          )}
+
           {/* Dirt Road Toggle */}
           <div
             onClick={onToggleAvoidDirt}
