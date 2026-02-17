@@ -4,7 +4,7 @@ import { getGoogleMapsUrl, openWazeLink } from '../services/NavigationService';
 import { Location, OptimizedRoute, Trip } from '../types';
 import { searchLocation, getReverseGeocoding } from '../services/api';
 import { StorageService } from '../services/storage';
-import { MapPin, Navigation, Search, AlertTriangle, Star, Check, Trash2, Code, Calculator, Map as MapIcon, Loader2, Home, X, ExternalLink, Locate, Settings, FileText, Pencil, CheckCircle } from 'lucide-react';
+import { MapPin, Navigation, Search, AlertTriangle, Star, Check, Trash2, Code, Calculator, Map as MapIcon, Loader2, Home, X, ExternalLink, Locate, Settings, FileText, Pencil, CheckCircle, MapPinOff } from 'lucide-react';
 import { MAX_FREE_STOPS } from '../constants';
 import LocationItem from './LocationItem';
 
@@ -169,6 +169,12 @@ const Sidebar: React.FC<SidebarProps> = ({
     setLocations(newLocs);
   };
 
+  const updateLocation = (index: number, newLocation: Location) => {
+    const updatedLocations = [...locations];
+    updatedLocations[index] = newLocation;
+    setLocations(updatedLocations);
+  };
+
   const formatDistance = (meters: number) => {
     if (meters < 1000) return `${Math.round(meters)} m`;
     return `${(meters / 1000).toFixed(1)} km`;
@@ -236,559 +242,239 @@ const Sidebar: React.FC<SidebarProps> = ({
     }
   };
 
-  return (
-    <div className="flex flex-col h-full bg-white shadow-xl w-full border-r border-gray-200">
+  // --- Redesigned UI ---
 
-      {/* Header */}
-      <div className="p-4 bg-emerald-600 text-white flex justify-between items-center shadow-md shrink-0">
-        <div className="flex items-center gap-2">
-          <Navigation className="h-6 w-6" />
-          <h1 className="text-xl font-bold tracking-tight">RotaLimpa</h1>
+  const SidebarFooter = () => (
+    <div className="p-4 bg-white border-t border-gray-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] z-20">
+      {/* Route Info if optimized */}
+      {route && (
+        <div className="mb-3 flex justify-between items-center text-sm font-medium text-gray-700 bg-gray-50 p-2 rounded-lg">
+          <div className="flex items-center gap-1">
+            <Navigation size={14} className="text-emerald-600" />
+            <span>{formatDistance(route.totalDistance)}</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <CheckCircle size={14} className="text-emerald-600" />
+            <span>{formatDuration(route.totalDuration)}</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <Calculator size={14} className="text-emerald-600" />
+            <span>{formatCurrency(route.totalAmount)}</span>
+          </div>
         </div>
-        <div className="flex gap-2 items-center">
-          <button onClick={onOpenHelp} className="p-1.5 hover:bg-emerald-700 rounded transition-colors" title="Guia do Motorista">
-            <CheckCircle size={18} />
-          </button>
-          <button onClick={onOpenHistory} className="p-1.5 hover:bg-emerald-700 rounded transition-colors" title="Histórico">
-            <FileText size={18} />
-          </button>
-          <button onClick={onOpenSettings} className="p-1.5 hover:bg-emerald-700 rounded transition-colors" title="Configurações">
-            <Settings size={18} />
-          </button>
-          {/* Features Removed as per request (Bulk Import & Camera) */}
+      )}
 
-          {isPremium ? (
-            <span className="bg-yellow-400 text-emerald-900 text-xs font-bold px-2 py-1 rounded-full flex items-center gap-1">
-              <Star size={12} fill="currentColor" /> PRO
-            </span>
-          ) : (
-            <button
-              onClick={onUpgradeClick}
-              className="text-xs bg-gray-900 hover:bg-gray-800 text-white px-2 py-1 rounded transition"
-            >
-              Seja Premium
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Main Content Scroll */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-6 relative">
-
-        {/* Search Input Area */}
-        <div className="space-y-3 relative z-50" ref={searchContainerRef}>
-          <label className="text-sm font-medium text-gray-700">Planejar Viagem</label>
-
+      {/* Main Actions */}
+      <div className="grid grid-cols-2 gap-3">
+        {(!route && locations.length >= 2) ? (
           <button
-            onClick={handleUseCurrentLocation}
-            disabled={isLoadingLocation || (!!route)}
-            className="w-full py-2 px-3 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 hover:bg-blue-100 transition-colors disabled:opacity-50 mb-2"
-          >
-            {isLoadingLocation ? <Loader2 className="animate-spin h-4 w-4" /> : <Locate className="h-4 w-4" />}
-            Partir da Minha Localização
-          </button>
-
-          <div className="relative">
-            <div className="relative flex items-center">
-              <input
-                type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                onFocus={() => {
-                  if (searchResults.length > 0) setShowDropdown(true);
-                }}
-                placeholder="Digite o endereço (Rua, Número, Cidade)..."
-                className="w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition text-sm shadow-sm"
-                disabled={!!route}
-                autoComplete="off"
-              />
-              <div className="absolute left-3 top-3 text-gray-400">
-                {isSearching ? <Loader2 className="animate-spin h-5 w-5" /> : <Search className="h-5 w-5" />}
-              </div>
-              {query && (
-                <button
-                  onClick={() => { setQuery(''); setSearchResults([]); setShowDropdown(false); }}
-                  className="absolute right-3 top-3 text-gray-400 hover:text-gray-600"
-                >
-                  <X size={18} />
-                </button>
-              )}
-            </div>
-
-            {/* Manual Add Button (visible when query exists) */}
-            {/* Manual Add Button (visible when query exists) */}
-            {query.length > 3 && (
-              <button
-                onClick={handleManualAdd}
-                className="absolute right-3 top-2.5 text-emerald-600 hover:text-emerald-800 font-bold text-xs bg-emerald-50 px-2 py-1 rounded-md transition-colors"
-              >
-                ADICIONAR
-              </button>
-            )}
-
-            {/* Autocomplete Dropdown */}
-            {showDropdown && (searchResults.length > 0 || isSearching) && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-2xl overflow-hidden z-[100] max-h-72 overflow-y-auto animate-in fade-in slide-in-from-top-2">
-                {isSearching && searchResults.length === 0 && (
-                  <div className="p-4 text-center text-gray-500 text-sm">
-                    Buscando endereços...
-                  </div>
-                )}
-
-                {!isSearching && searchResults.length === 0 && query.length > 2 && (
-                  <div className="p-4 text-center text-gray-500 text-sm">
-                    Nenhum endereço encontrado. Tente simplificar.
-                  </div>
-                )}
-
-                {searchResults.map((loc, i) => (
-                  <button
-                    key={i}
-                    onClick={() => {
-                      setQuery(loc.name);
-                      setSearchResults([]);
-                      // Do NOT add immediately. Let user edit.
-                    }}
-                    className="w-full text-left px-4 py-3 hover:bg-emerald-50 cursor-pointer flex items-start gap-3 transition-colors border-b border-gray-50 last:border-0 group"
-                  >
-                    <div className="bg-gray-100 group-hover:bg-white group-hover:text-emerald-600 p-2.5 rounded-full shrink-0 text-gray-500 mt-0.5 transition-colors">
-                      {loc.address?.number ? <Home size={18} /> : <MapPin size={18} />}
-                    </div>
-                    <div className="flex flex-col min-w-0">
-                      <span className="font-bold text-gray-800 text-sm break-words group-hover:text-emerald-700">
-                        {loc.name}
-                      </span>
-                      <span className="text-xs text-gray-500 break-words leading-tight mt-0.5">
-                        {[
-                          loc.address?.street !== loc.name ? loc.address?.street : null,
-                          loc.address?.city,
-                          loc.address?.state
-                        ].filter(Boolean).join(' • ')}
-                      </span>
-                    </div>
-                  </button>
-                ))}
-
-                <div className="bg-gray-50 p-2 text-center text-[10px] text-gray-400 border-t border-gray-100 uppercase tracking-wider">
-                  Resultados via OpenStreetMap
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Location List */}
-        <div className="space-y-2 z-0">
-          <div className="flex justify-between items-center">
-            <h3 className="font-semibold text-gray-800 flex items-center gap-2">
-              <MapPin size={16} /> Paradas
-              <span className="text-xs font-normal text-gray-500">
-                ({locations.length} / {isPremium ? '∞' : MAX_FREE_STOPS})
-              </span>
-            </h3>
-            {locations.length > 0 && !route && (
-              <button onClick={() => setLocations([])} className="text-xs text-red-500 hover:text-red-700">Limpar</button>
-            )}
-          </div>
-
-          {locations.length === 0 ? (
-            <div className="text-center py-6 border-2 border-dashed border-gray-200 rounded-lg bg-gray-50">
-              <p className="text-gray-400 text-xs">Adicione endereços completos com número.</p>
-            </div>
-          ) : (
-            <ul className="space-y-3 relative p-1 custom-scrollbar pb-20">
-              {locations.map((loc, index) => (
-                <LocationItem
-                  key={index}
-                  loc={loc}
-                  index={index}
-                  isLast={index === locations.length - 1}
-                  isFirst={index === 0}
-                  onRemove={() => removeLocation(index)}
-                  onUpdate={(newLoc) => {
-                    const newLocs = [...locations];
-                    newLocs[index] = newLoc;
-                    setLocations(newLocs);
-                  }}
-                />
-              ))}
-            </ul>
-          )}
-        </div>
-
-        {/* Route Details & Freight Calculator */}
-        {route && (
-          <div className="space-y-3 animate-in fade-in slide-in-from-bottom-4">
-            {/* Summary Card */}
-            <div className="bg-slate-800 text-white p-4 rounded-lg space-y-3">
-              <h3 className="font-bold border-b border-slate-600 pb-2">Resumo da Rota</h3>
-              <div className="flex justify-between items-center bg-emerald-50 p-2 rounded border border-emerald-100 mb-2">
-                <div className="flex flex-col">
-                  <span className="text-xs text-gray-500">Distância Total</span>
-                  <span className="font-bold text-emerald-800 text-lg">{(route.totalDistance / 1000).toFixed(1)} km</span>
-                </div>
-                <div className="flex flex-col items-end">
-                  <span className="text-xs text-gray-500">Tempo Estimado</span>
-                  <span className="font-bold text-emerald-800 text-lg">{formatDuration(route.totalDuration)}</span>
-                </div>
-              </div>
-
-              {/* Route Type Indicators & Legend */}
-              <div className="bg-white border border-gray-200 p-3 rounded-lg shadow-sm mb-2">
-                <div className="flex items-center justify-between mb-2 pb-2 border-b border-gray-100">
-                  <span className="text-xs font-bold text-gray-700">Detalhes do Terreno</span>
-                  {avoidDirt ? (
-                    <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-semibold border border-blue-200">Modo: Evitar Terra</span>
-                  ) : (
-                    <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-semibold">Modo: Padrão</span>
-                  )}
-                </div>
-
-                {/* Warning if dirt is still present */}
-                {route.segments.some(s => s.type === 'unpaved') ? (
-                  <div className="flex items-start gap-2 bg-yellow-50 p-2 rounded text-yellow-800 text-xs mb-2 border border-yellow-100">
-                    <AlertTriangle size={14} className="mt-0.5 shrink-0" />
-                    <span>
-                      <b>Atenção:</b> Mesmo evitando, esta rota possui trechos identificados como terra/não pavimentados.
-                    </span>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2 text-emerald-700 text-xs mb-2 px-1">
-                    <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-                    <span>Rota 100% Pavimentada (Estimado)</span>
-                  </div>
-                )}
-
-                {/* Legend */}
-                <div className="flex items-center gap-4 text-[10px] text-gray-500 bg-gray-50 p-1.5 rounded">
-                  <div className="flex items-center gap-1">
-                    <div className="w-4 h-1 bg-blue-500 rounded"></div>
-                    <span>Asfalto</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-4 h-1 border-b-2 border-dashed border-red-500"></div>
-                    <span>Terra/Chão</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Toll Identification */}
-            <div className="bg-white border border-gray-200 p-4 rounded-lg shadow-sm space-y-2">
-              <div className="flex items-center gap-2 text-gray-700 font-semibold text-sm border-b border-gray-100 pb-2">
-                <span className="bg-orange-100 text-orange-600 p-1 rounded"><AlertTriangle size={14} /></span>
-                Pedágios Identificados
-              </div>
-
-              <div className="flex flex-col gap-2 mt-2 pt-2 border-t border-gray-100">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-gray-500 text-xs font-bold">Quantidade:</span>
-                  <span className="text-sm font-bold bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full">{route.tollCount}</span>
-                </div>
-
-                {/* Toll List - Freemium Lock */}
-                {route.tollDetails && route.tollDetails.length > 0 ? (
-                  <div className="relative">
-                    {!isPremium && (
-                      <div className="absolute inset-0 z-10 bg-white/10 backdrop-blur-[2px] flex items-center justify-center">
-                        <div className="bg-gray-900/90 text-white text-xs p-2 rounded shadow-lg text-center">
-                          <p className="font-bold mb-1">Detalhes Bloqueados</p>
-                          <button onClick={onUpgradeClick} className="bg-emerald-500 hover:bg-emerald-600 px-2 py-1 rounded font-bold text-[10px] transition">
-                            Ver Onde Pagar
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                    <ul className={`space-y-2 max-h-60 overflow-y-auto pr-1 ${!isPremium ? 'opacity-50 select-none pointer-events-none' : ''}`}>
-                      {route.tollDetails.map((toll, idx) => (
-                        <li key={idx} className="text-xs text-slate-700 flex flex-col border-b border-gray-50 pb-2 last:border-0 hover:bg-gray-50 p-1 rounded transition-colors">
-                          <div className="flex justify-between items-start">
-                            <span className="font-semibold text-gray-800">{toll.name || "Pedágio Identificado"}</span>
-                          </div>
-
-                          {toll.operator && (
-                            <span className="text-[10px] text-gray-400 mt-0.5">Op: {toll.operator}</span>
-                          )}
-
-                          {toll.nearbyLocation && (
-                            <div className="flex items-center gap-1 mt-1 text-emerald-600 font-medium">
-                              <MapIcon size={10} />
-                              <span className="text-[10px]">{toll.nearbyLocation}</span>
-                            </div>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : (
-                  <span className="text-xs text-gray-400 italic">Nenhum pedágio identificado nesta rota.</span>
-                )}
-              </div>
-            </div>
-
-            {/* Freight Calculator */}
-            {/* Freight Calculator */}
-            <div className="bg-white border border-gray-200 p-4 rounded-lg shadow-sm space-y-3 relative overflow-hidden">
-              {!isPremium && (
-                <div className="absolute inset-0 bg-white/60 backdrop-blur-[1px] z-10 flex flex-col items-center justify-center text-center p-4">
-                  <div className="bg-white p-3 rounded-full shadow-lg mb-2">
-                    <Calculator className="text-emerald-600" size={20} />
-                  </div>
-                  <h4 className="font-bold text-gray-800 text-sm">Calculadora de Frete</h4>
-                  <p className="text-[10px] text-gray-500 mb-2">Calcule seus ganhos automaticamente.</p>
-                  <button onClick={onUpgradeClick} className="bg-gray-900 text-white text-xs px-3 py-1.5 rounded font-bold hover:bg-black transition">
-                    Desbloquear
-                  </button>
-                </div>
-              )}
-
-              <div className="flex items-center gap-2 text-gray-700 font-semibold text-sm border-b border-gray-100 pb-2">
-                <Calculator size={16} /> Calculadora de Frete
-              </div>
-
-              <p className="text-[10px] text-gray-500 bg-gray-50 p-2 rounded">
-                O valor é calculado sobre a <strong>distância total planejada</strong> da rota. Não se altera automaticamente durante o trajeto.
-              </p>
-
-              <div>
-                <label className="text-xs text-gray-500 mb-1 block">Valor por KM (R$)</label>
-                <div className="relative">
-                  <span className="absolute left-3 top-2 text-gray-400 text-sm">R$</span>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    step="0.10"
-                    placeholder="0,00"
-                    value={freightPricePerKm}
-                    onChange={(e) => {
-                      setFreightPricePerKm(e.target.value);
-                      localStorage.setItem('freightPricePerKm', e.target.value);
-                    }}
-                    disabled={!isPremium}
-                    className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none text-sm font-bold text-gray-800 disabled:bg-gray-50 disabled:text-gray-400"
-                  />
-                </div>
-              </div>
-
-              <div className="bg-emerald-50 border border-emerald-100 p-3 rounded-md flex justify-between items-center mb-4">
-                <span className="text-sm text-emerald-800 font-medium">Frete Total Estimado</span>
-                <span className="text-lg font-bold text-emerald-700">
-                  {freightPricePerKm && !isNaN(parseFloat(freightPricePerKm))
-                    ? formatCurrency((route.totalDistance / 1000) * parseFloat(freightPricePerKm))
-                    : 'R$ --'}
-                </span>
-              </div>
-
-              {/* Fuel & Profit Calculator */}
-              <div className="relative pt-4 border-t border-dashed border-gray-200">
-                {!isPremium && (
-                  <div className="absolute inset-x-0 -bottom-2 top-0 bg-white/80 backdrop-blur-[1px] z-10 flex flex-col items-center justify-center text-center p-2">
-                    <span className="text-xs font-bold text-gray-500 mb-1">Calculadora de Lucro Líquido</span>
-                    <button onClick={onUpgradeClick} className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] px-2 py-1 rounded font-bold transition">
-                      Desbloquear
-                    </button>
-                  </div>
-                )}
-                <div className="grid grid-cols-2 gap-3 mb-3">
-                  <div>
-                    <label className="text-[10px] text-gray-500 font-bold block mb-1">Consumo (km/L)</label>
-                    <input
-                      type="number"
-                      inputMode="decimal"
-                      placeholder="Ex: 10"
-                      value={fuelConsumption}
-                      onChange={(e) => {
-                        setFuelConsumption(e.target.value);
-                        localStorage.setItem('fuelConsumption', e.target.value);
-                      }}
-                      className="w-full p-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-emerald-500 outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] text-gray-500 font-bold block mb-1">Preço Combustível (R$)</label>
-                    <input
-                      type="number"
-                      inputMode="decimal"
-                      placeholder="Ex: 5.50"
-                      value={fuelPrice}
-                      onChange={(e) => {
-                        setFuelPrice(e.target.value);
-                        localStorage.setItem('fuelPrice', e.target.value);
-                      }}
-                      className="w-full p-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-emerald-500 outline-none"
-                    />
-                  </div>
-                </div>
-
-                {(fuelConsumption && fuelPrice && !isNaN(parseFloat(fuelConsumption)) && !isNaN(parseFloat(fuelPrice))) && (
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-center text-xs text-red-600">
-                      <span>Custo Combustível:</span>
-                      <span className="font-bold">
-                        {formatCurrency(((route.totalDistance / 1000) / parseFloat(fuelConsumption)) * parseFloat(fuelPrice))}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center text-sm text-emerald-700 bg-emerald-50 p-2 rounded border border-emerald-100">
-                      <span className="font-bold">Lucro Líquido Estimado:</span>
-                      <span className="font-bold text-lg">
-                        {freightPricePerKm && !isNaN(parseFloat(freightPricePerKm))
-                          ? formatCurrency(
-                            ((route.totalDistance / 1000) * parseFloat(freightPricePerKm)) -
-                            (((route.totalDistance / 1000) / parseFloat(fuelConsumption)) * parseFloat(fuelPrice))
-                          )
-                          : 'R$ --'}
-                      </span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Warnings */}
-            {!isPremium && (
-              <div className="bg-amber-900/50 p-2 rounded border border-amber-700 text-xs text-amber-200 flex items-start gap-2 mt-2">
-                <AlertTriangle size={16} className="shrink-0 mt-0.5" />
-                <p>Detecção de estrada de terra oculta. Assine Premium.</p>
-              </div>
-            )}
-
-            {isPremium && (
-              <div className="bg-emerald-50 p-2 rounded border border-emerald-200 text-xs text-emerald-800 flex items-start gap-2 mt-2">
-                <Check size={16} className="shrink-0 mt-0.5" />
-                <p>Rota verificada: Trechos de terra identificados.</p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Footer / Actions */}
-        <div className="p-4 bg-white border-t border-gray-100 space-y-3 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-20">
-
-          {/* Main Action Button */}
-          <button
-            onClick={route ? openNavigation : onOptimize}
-            disabled={locations.length < 2 || isOptimizing}
-            className={`
-              w-full py-4 rounded-xl font-bold text-white shadow-lg flex items-center justify-center gap-2 transition-all transform hover:scale-[1.02] active:scale-[0.98]
-              ${locations.length < 2
-                ? 'bg-gray-300 cursor-not-allowed shadow-none'
-                : route
-                  ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-200'
-                  : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200'
-              }
-            `}
+            onClick={onOptimize}
+            disabled={isOptimizing}
+            className="col-span-2 w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-lg shadow-lg flex items-center justify-center gap-2 transition-all transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isOptimizing ? (
               <>
                 <Loader2 className="animate-spin" size={20} />
-                Calculando Rota...
-              </>
-            ) : route ? (
-              <>
-                <Navigation size={20} /> Navegar (Google Maps)
+                Calculando...
               </>
             ) : (
               <>
-                <MapPin size={20} /> Otimizar Rota
+                <MapIcon size={20} />
+                Otimizar Rota
               </>
             )}
           </button>
+        ) : route ? (
+          <>
+            <button
+              onClick={setRoundTrip ? () => setRoundTrip(!roundTrip) : undefined}
+              className={`flex flex-col items-center justify-center p-2 rounded-xl border-2 transition-all ${roundTrip
+                ? 'border-emerald-600 bg-emerald-50 text-emerald-700'
+                : 'border-gray-200 text-gray-500 hover:border-emerald-300'
+                }`}
+            >
+              <span className="text-xs font-bold">Ida e Volta</span>
+              <span className="text-[10px]">{roundTrip ? 'ATIVADO' : 'DESATIVADO'}</span>
+            </button>
 
-          {/* Secondary Actions Grid */}
-          <div className="grid grid-cols-2 gap-3">
-            {/* Finalizar Serviço */}
+            <button
+              onClick={onToggleAvoidDirt}
+              className={`flex flex-col items-center justify-center p-2 rounded-xl border-2 transition-all ${avoidDirt
+                ? 'border-amber-600 bg-amber-50 text-amber-700'
+                : 'border-gray-200 text-gray-500 hover:border-amber-300'
+                }`}
+            >
+              <span className="text-xs font-bold">Evitar Terra</span>
+              <span className="text-[10px]">{avoidDirt ? 'ATIVADO' : 'DESATIVADO'}</span>
+            </button>
+
+            <button
+              onClick={openNavigation}
+              className="col-span-2 w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-lg shadow-lg flex items-center justify-center gap-2 transition-all transform active:scale-95"
+            >
+              <Navigation size={20} />
+              Iniciar Navegação
+            </button>
+
             <button
               onClick={handleFinishTrip}
-              disabled={!route}
-              className={`
-                  flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm border-2 transition-all
-                  ${!route
-                  ? 'border-gray-100 text-gray-300 cursor-not-allowed'
-                  : 'border-emerald-100 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:border-emerald-200'
-                }
-                `}
+              className="col-span-2 w-full py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 transition-colors"
             >
-              <CheckCircle size={16} /> Finalizar
+              <Check size={16} />
+              Finalizar Viagem
             </button>
-
-            {/* Round Trip Toggle */}
-            <button
-              onClick={onToggleRoundTrip}
-              className={`
-                  flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm border-2 transition-all
-                   ${roundTrip
-                  ? 'border-blue-500 bg-blue-50 text-blue-700'
-                  : 'border-gray-200 text-gray-500 hover:border-gray-300'
-                }
-                `}
-            >
-              <Calculator size={16} /> {roundTrip ? 'Ida e Volta' : 'Só Ida'}
-            </button>
+          </>
+        ) : (
+          <div className="col-span-2 text-center text-gray-400 text-sm py-2">
+            Adicione pelo menos 2 locais para traçar rota.
           </div>
+        )}
+      </div>
+    </div>
+  );
 
-          {!isOptimizing && route && locations.length > 0 && (
-            <button
-              onClick={() => {
-                // Waze Deep Link for the FIRST stop or destination?
-                // Waze is tricky with multi-stop. We typically send to the final destination 
-                // OR we try to send 'search' query.
-                // Best effort: Navigate to the *Next Stop* (index 0 if array is [origin, stop1, ...])?
-                // Usually 'locations' [0] is origin. [1] is first destination.
-                // Let's send to the first destination.
-                if (locations.length > 1) {
-                  const dest = locations[1]; // First stop after origin
-                  window.open(`https://waze.com/ul?ll=${dest.lat},${dest.lng}&navigate=yes`, '_blank');
-                }
-              }}
-              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-sm bg-cyan-50 text-cyan-700 hover:bg-cyan-100 transition-colors border border-cyan-200"
-            >
-              <Navigation size={16} /> Navegar com Waze (Próxima Parada)
-            </button>
-          )}
+  return (
+    <div className="flex flex-col h-full bg-slate-50 shadow-xl w-full border-r border-gray-200 font-sans">
 
-          {/* Dirt Road Toggle */}
-          <div
-            onClick={onToggleAvoidDirt}
-            className={`
-                flex items-center justify-between px-4 py-3 rounded-xl border-2 cursor-pointer transition-all
-                ${avoidDirt
-                ? 'border-amber-500 bg-amber-50'
-                : 'border-gray-100 hover:border-gray-200 bg-gray-50'
-              }
-              `}
-          >
-            <div className="flex items-center gap-2">
-              <AlertTriangle size={16} className={avoidDirt ? "text-amber-600" : "text-gray-400"} />
-              <span className={`text-sm font-semibold ${avoidDirt ? "text-amber-800" : "text-gray-500"}`}>
-                Evitar Estradas de Terra
-              </span>
-            </div>
-
-            <div className={`w-10 h-5 rounded-full relative transition-colors ${avoidDirt ? "bg-amber-500" : "bg-gray-300"}`}>
-              <div className={`absolute top-1 left-1 bg-white w-3 h-3 rounded-full transition-transform ${avoidDirt ? "translate-x-5" : "translate-x-0"}`} />
-            </div>
+      {/* Header - Compact & Premium Look */}
+      <div className="p-3 bg-white border-b border-gray-200 shadow-sm flex justify-between items-center z-10">
+        <div className="flex items-center gap-2">
+          <div className="bg-emerald-100 p-1.5 rounded-lg">
+            <Navigation className="h-5 w-5 text-emerald-600" />
           </div>
+          <h1 className="text-lg font-bold text-gray-800 tracking-tight">RotaLimpa</h1>
+        </div>
 
-          {/* Stats Panel (Only if route exists) */}
-          {route && (
-            <div className="bg-gray-900 text-white rounded-xl p-4 mt-2">
-              <div className="flex justify-between items-end">
-                <div>
-                  <p className="text-gray-400 text-xs uppercase tracking-wider font-bold mb-1">Distância</p>
-                  <p className="text-xl font-bold">{(route.totalDistance / 1000).toFixed(1)} <span className="text-sm text-gray-400">km</span></p>
-                </div>
-                <div className="text-right">
-                  <p className="text-gray-400 text-xs uppercase tracking-wider font-bold mb-1">Tempo</p>
-                  <p className="text-xl font-bold">{~~(route.totalDuration / 3600)}h {~~((route.totalDuration % 3600) / 60)}m</p>
-                </div>
-              </div>
-            </div>
-          )}
-
+        <div className="flex gap-1">
+          <button onClick={onOpenHelp} className="p-2 text-gray-500 hover:bg-gray-100 hover:text-emerald-600 rounded-full transition-colors" title="Ajuda">
+            <CheckCircle size={18} />
+          </button>
+          <button onClick={onOpenHistory} className="p-2 text-gray-500 hover:bg-gray-100 hover:text-blue-600 rounded-full transition-colors" title="Histórico">
+            <FileText size={18} />
+          </button>
+          <button onClick={onOpenSettings} className="p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-800 rounded-full transition-colors" title="Configurações">
+            <Settings size={18} />
+          </button>
         </div>
       </div>
 
-    </div >
+      {/* Main Content - Scrollable */}
+      <div className="flex-1 overflow-y-auto relative scroll-smooth">
+        <div className="p-4 space-y-5">
+
+          {/* Search Section */}
+          <div className="space-y-2 relative z-50" ref={searchContainerRef}>
+            <div className="relative group">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 group-focus-within:text-emerald-500 transition-colors" size={18} />
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Buscar endereço (Rua, Número, Cidade)"
+                className="w-full pl-10 pr-10 py-3 bg-white border border-gray-200 rounded-xl shadow-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all text-sm font-medium"
+              />
+              {isSearching && (
+                <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-emerald-500 border-t-transparent"></div>
+                </div>
+              )}
+            </div>
+
+            {/* Search Dropdown */}
+            {showDropdown && searchResults.length > 0 && (
+              <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden z-[100] max-h-64 overflow-y-auto animate-in fade-in zoom-in-95 duration-200">
+                {searchResults.map((result, index) => (
+                  <div
+                    key={index}
+                    onClick={() => addLocation(result)}
+                    className="p-3 hover:bg-emerald-50 cursor-pointer border-b border-gray-50 last:border-0 flex items-start gap-3 transition-colors"
+                  >
+                    <MapPin size={16} className="mt-1 text-emerald-600 shrink-0" />
+                    <div>
+                      <p className="text-sm font-medium text-gray-800">{result.name.split(',')[0]}</p>
+                      <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">{result.name}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <button
+              onClick={handleUseCurrentLocation}
+              disabled={isLoadingLocation}
+              className="w-full py-2.5 px-3 bg-white text-emerald-700 border border-emerald-100 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 hover:bg-emerald-50 hover:shadow-sm transition-all disabled:opacity-50"
+            >
+              {isLoadingLocation ? <Loader2 className="animate-spin" size={16} /> : <Locate size={16} />}
+              Usar Minha Localização
+            </button>
+
+            {/* Premium Badge */}
+            {!isPremium && (
+              <div
+                onClick={onUpgradeClick}
+                className="flex items-center justify-between p-3 bg-gradient-to-r from-gray-900 to-gray-800 rounded-xl text-white shadow-md cursor-pointer hover:shadow-lg transition-all group"
+              >
+                <div className="flex items-center gap-2">
+                  <Star size={16} className="text-yellow-400 group-hover:scale-110 transition-transform" />
+                  <div className="flex flex-col">
+                    <span className="text-xs font-bold text-yellow-400 uppercase tracking-wide">Seja Premium</span>
+                    <span className="text-[10px] text-gray-400 leading-tight">Desbloqueie todos os recursos</span>
+                  </div>
+                </div>
+                <ExternalLink size={14} className="text-gray-400" />
+              </div>
+            )}
+
+          </div>
+
+          {/* Locations List */}
+          {/* Locations List */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-gray-400 pl-1">
+                Paradas ({locations.length})
+              </h2>
+              {locations.length > 0 && (
+                <button
+                  onClick={() => {
+                    if (confirm("Limpar todas as paradas?")) setLocations([]);
+                  }}
+                  className="text-[10px] font-bold text-red-500 hover:text-red-700 hover:underline transition-all"
+                >
+                  LIMPAR TUDO
+                </button>
+              )}
+            </div>
+
+            {locations.length === 0 ? (
+              <div className="text-center py-8 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                <MapPinOff className="mx-auto text-gray-300 mb-2" size={32} />
+                <p className="text-sm text-gray-500 font-medium">Nenhuma parada adicionada</p>
+                <p className="text-xs text-gray-400 mt-1">Busque um endereço acima para começar.</p>
+              </div>
+            ) : (
+              <ul className="space-y-2">
+                {locations.map((loc, index) => (
+                  <LocationItem
+                    key={index}
+                    loc={loc}
+                    index={index}
+                    isLast={index === locations.length - 1}
+                    onRemove={() => removeLocation(index)}
+                    isFirst={index === 0}
+                    onUpdate={(newLoc) => updateLocation(index, newLoc)}
+                  />
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Sticky Footer */}
+      <SidebarFooter />
+
+    </div>
   );
 };
 

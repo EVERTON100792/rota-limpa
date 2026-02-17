@@ -97,7 +97,7 @@ const App: React.FC = () => {
       {/* Botão Flutuante do Menu (Apenas Mobile/Quando fechado) */}
       <button
         onClick={toggleSidebar}
-        className={`absolute top - 4 left - 4 z - [2000] bg - white p - 3 rounded - full shadow - lg text - emerald - 700 transition - all duration - 300 ${isSidebarOpen ? 'scale-0 opacity-0 pointer-events-none' : 'scale-100 opacity-100'} `}
+        className={`absolute top-4 left-4 z-[2000] bg-white p-3 rounded-full shadow-lg text-emerald-700 transition-all duration-300 ${isSidebarOpen ? 'scale-0 opacity-0 pointer-events-none' : 'scale-100 opacity-100'} `}
         aria-label="Abrir Menu"
       >
         <Menu size={24} />
@@ -106,8 +106,8 @@ const App: React.FC = () => {
       {/* Sidebar Container (Drawer) */}
       <div
         className={`
-          absolute inset - y - 0 left - 0 z - [3000] bg - white shadow - 2xl transform transition - transform duration - 300 ease -in -out flex flex - col
-w - full md: w - [400px] h - full
+          absolute inset-y-0 left-0 z-[3000] bg-white shadow-2xl transform transition-transform duration-300 ease-in-out flex flex-col
+          w-full md:w-[400px] h-full
           ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
 `}
       >

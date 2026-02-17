@@ -47,6 +47,7 @@ export interface OptimizedRoute {
   waypoints: Location[]; // The ordered list of stops
   tollCount: number;
   tollDetails: { lat: number; lng: number; name?: string; operator?: string; nearbyLocation?: string; }[];
+  totalAmount: number;
 }
 
 export interface UserProfile {
