@@ -1,9 +1,11 @@
+
 import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import MapComponent from './components/MapComponent';
 import PremiumModal from './components/PremiumModal';
 import SettingsModal from './components/SettingsModal';
 import TripHistoryModal from './components/TripHistoryModal';
+import HelpModal from './components/HelpModal';
 import { Location, OptimizedRoute, Trip } from './types';
 import { getOptimizedRoute } from './services/api';
 import { Menu, X } from 'lucide-react';
@@ -25,6 +27,7 @@ const App: React.FC = () => {
   const [showDevCode, setShowDevCode] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showHelp, setShowHelp] = useState(false); // New State
 
   // Monitorar redimensionamento da tela
   useEffect(() => {
@@ -94,7 +97,7 @@ const App: React.FC = () => {
       {/* Botão Flutuante do Menu (Apenas Mobile/Quando fechado) */}
       <button
         onClick={toggleSidebar}
-        className={`absolute top-4 left-4 z-[2000] bg-white p-3 rounded-full shadow-lg text-emerald-700 transition-all duration-300 ${isSidebarOpen ? 'scale-0 opacity-0 pointer-events-none' : 'scale-100 opacity-100'}`}
+        className={`absolute top - 4 left - 4 z - [2000] bg - white p - 3 rounded - full shadow - lg text - emerald - 700 transition - all duration - 300 ${isSidebarOpen ? 'scale-0 opacity-0 pointer-events-none' : 'scale-100 opacity-100'} `}
         aria-label="Abrir Menu"
       >
         <Menu size={24} />
@@ -103,10 +106,10 @@ const App: React.FC = () => {
       {/* Sidebar Container (Drawer) */}
       <div
         className={`
-          absolute inset-y-0 left-0 z-[3000] bg-white shadow-2xl transform transition-transform duration-300 ease-in-out flex flex-col
-          w-full md:w-[400px] h-full
+          absolute inset - y - 0 left - 0 z - [3000] bg - white shadow - 2xl transform transition - transform duration - 300 ease -in -out flex flex - col
+w - full md: w - [400px] h - full
           ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-        `}
+`}
       >
         {/* Botão Fechar Sidebar (Apenas Mobile) */}
         {isMobile && (
@@ -135,6 +138,7 @@ const App: React.FC = () => {
           }}
           onOpenSettings={() => setShowSettings(true)}
           onOpenHistory={() => setShowHistory(true)}
+          onOpenHelp={() => setShowHelp(true)} // Pass new prop
           onStartNavigation={() => { }}
           isNavigating={false}
           avoidDirt={avoidDirt}
@@ -195,6 +199,11 @@ const App: React.FC = () => {
       <SettingsModal
         isOpen={showSettings}
         onClose={() => setShowSettings(false)}
+      />
+
+      <HelpModal
+        isOpen={showHelp}
+        onClose={() => setShowHelp(false)}
       />
 
       <TripHistoryModal

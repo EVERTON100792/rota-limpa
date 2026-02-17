@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
+import { getGoogleMapsUrl, openWazeLink } from '../services/NavigationService';
 import { Location, OptimizedRoute, Trip } from '../types';
 import { searchLocation, getReverseGeocoding } from '../services/api';
 import { StorageService } from '../services/storage';
@@ -19,6 +20,7 @@ interface SidebarProps {
   onShowDevCode: () => void;
   onOpenSettings: () => void;
   onOpenHistory: () => void;
+  onOpenHelp: () => void;
   onStartNavigation: () => void; // Mantido para compatibilidade, mas não usado internamente
   isNavigating: boolean;
   avoidDirt: boolean;
@@ -39,6 +41,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   onShowDevCode,
   onOpenSettings,
   onOpenHistory,
+  onOpenHelp,
   avoidDirt,
   onToggleAvoidDirt,
   roundTrip,
@@ -188,27 +191,7 @@ const Sidebar: React.FC<SidebarProps> = ({
 
   // --- Navigation Logic ---
   const openNavigation = () => {
-    if (!locations || locations.length < 2) return;
-
-    // Filter valid locations
-    const validLocs = locations.filter(l => l.lat && l.lng);
-    if (validLocs.length < 2) return;
-
-    const origin = validLocs[0];
-    const destination = validLocs[validLocs.length - 1];
-    const waypoints = validLocs.slice(1, -1);
-
-    // Google Maps URL Scheme with Fidelity (originalLat/Lng)
-    const formatCoord = (l: Location) => `${l.originalLat || l.lat},${l.originalLng || l.lng}`;
-
-    const originStr = formatCoord(origin);
-    const destStr = formatCoord(destination);
-    const waypointsStr = waypoints.map(formatCoord).join('|');
-
-    let url = `https://www.google.com/maps/dir/?api=1&origin=${originStr}&destination=${destStr}&travelmode=driving`;
-    if (waypoints.length > 0) {
-      url += `&waypoints=${waypointsStr}`;
-    }
+    const url = getGoogleMapsUrl(route, locations, avoidDirt);
     window.open(url, '_blank');
   };
 
@@ -263,6 +246,9 @@ const Sidebar: React.FC<SidebarProps> = ({
           <h1 className="text-xl font-bold tracking-tight">RotaLimpa</h1>
         </div>
         <div className="flex gap-2 items-center">
+          <button onClick={onOpenHelp} className="p-1.5 hover:bg-emerald-700 rounded transition-colors" title="Guia do Motorista">
+            <CheckCircle size={18} />
+          </button>
           <button onClick={onOpenHistory} className="p-1.5 hover:bg-emerald-700 rounded transition-colors" title="Histórico">
             <FileText size={18} />
           </button>
