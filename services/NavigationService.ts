@@ -10,8 +10,6 @@ export const getGoogleMapsUrl = (route: OptimizedRoute | null, locations: Locati
 
     const origin = locations[0];
     const destination = locations[locations.length - 1];
-
-    // Real stops (excluding origin/dest)
     const realWaypoints = locations.slice(1, -1);
 
     const formatCoord = (lat: number, lng: number) => `${lat},${lng}`;
@@ -20,58 +18,112 @@ export const getGoogleMapsUrl = (route: OptimizedRoute | null, locations: Locati
 
     let finalWaypoints: string[] = [];
 
-    if (avoidDirt) {
-        // --- High Fidelity Mode (Ghost Waypoints) ---
-        // We need to sample points from the segments to force the route.
-        // Google Maps URL has a limit (around 2048 chars).
-        // We should add ghost points BUT we must be careful not to make them "stops" if possible.
-        // Unfortunately, deep links usually treat waypoints as stops.
-        // We will add a moderate amount of points to guide the route without overwhelming the driver.
+    // Check if we should use High Fidelity Mode (Ghost Waypoints)
+    // We use it if avoidDirt is on (to force paved roads) OR if it's a Round Trip (to force return path adherence)
+    // We infer round trip if first and last locations are close (< 200m)
+    const isRoundTrip = locations.length > 2 &&
+        (Math.abs(origin.lat - destination.lat) < 0.002 && Math.abs(origin.lng - destination.lng) < 0.002);
 
-        // 1. Flatten all coordinates from all segments
+    if (avoidDirt || isRoundTrip) {
+        // --- High Fidelity Mode (Ghost Waypoints) ---
+        // Strategy: We have the full route geometry in `route.segments`.
+        // We have the Real Waypoints (Stops) that MUST be visited.
+        // We need to insert Ghost Points *between* the Real Waypoints to force the path.
+
+        // 1. Flatten all coordinates
         const allCoords = route.segments.flatMap(s => s.coordinates);
 
-        // 2. Sample points. 
-        // Heuristic: Take a point every ~5km or at least every 10% of the array if small?
-        // Let's try a fixed count approach to stay safe on URL length.
-        // We want maybe 10 ghost points max distributed along the route.
-        const maxGhostPoints = 8;
-        const step = Math.floor(allCoords.length / (maxGhostPoints + 1));
+        if (allCoords.length > 0) {
+            // 2. Find indices of Real Waypoints in the geometry
+            // validWaypointsIndices[i] corresponds to realWaypoints[i]
+            const waypointIndices: number[] = [];
 
-        if (step > 5) { // Only sample if we have enough points
-            for (let i = step; i < allCoords.length; i += step) {
-                if (finalWaypoints.length >= maxGhostPoints) break;
-                const coord = allCoords[i];
-                if (coord) {
-                    finalWaypoints.push(formatCoord(coord[0], coord[1]));
+            realWaypoints.forEach(wp => {
+                let minDist = Infinity;
+                let bestIdx = -1;
+
+                // Optimization: Search only forward from last found index to preserve order
+                const searchStart = waypointIndices.length > 0 ? waypointIndices[waypointIndices.length - 1] : 0;
+
+                // We scan a reasonable window ahead to find the match. (Full scan is fine for <10k points)
+                for (let i = searchStart; i < allCoords.length; i++) {
+                    const c = allCoords[i];
+                    const dist = Math.sqrt(Math.pow(c[0] - wp.lng, 2) + Math.pow(c[1] - wp.lat, 2));
+                    if (dist < minDist) {
+                        minDist = dist;
+                        bestIdx = i;
+                    }
+                    // Stop searching if we passed it and are moving away fast? 
+                    // No, simpler to just find global best in remaining array.
+                }
+
+                // If we found a matching point reasonably close (approx < 1km in degrees)
+                if (bestIdx !== -1 && minDist < 0.01) {
+                    waypointIndices.push(bestIdx);
+                } else {
+                    // Fallback: If not found on path, push a placeholder index to keep array aligned?
+                    // Actually, if we can't map the waypoint to the path, we can't safely interleave.
+                    // Just push the previous index or skip? 
+                    // Let's push -1 to signal "Just insert the waypoint here without ghosts before it".
+                    waypointIndices.push(-1);
+                }
+            });
+
+            // 3. Generate Waypoint List (Ghost + Real)
+            let lastIdx = 0;
+
+            realWaypoints.forEach((wp, i) => {
+                const targetIdx = waypointIndices[i];
+
+                if (targetIdx > lastIdx) {
+                    // Sample ghosts between lastIdx and targetIdx
+                    const segmentLen = targetIdx - lastIdx;
+                    // Density: One ghost every ~50-100 points or fixed count?
+                    // Fixed count per segment is safer for URL limits.
+                    // If we have 5 stops, max 2-3 ghosts per leg.
+                    const ghostsPerLeg = 2;
+                    const step = Math.floor(segmentLen / (ghostsPerLeg + 1));
+
+                    if (step > 10) {
+                        for (let k = 1; k <= ghostsPerLeg; k++) {
+                            const idx = lastIdx + (step * k);
+                            if (idx < targetIdx) {
+                                const c = allCoords[idx];
+                                finalWaypoints.push(formatCoord(c[0], c[1]));
+                            }
+                        }
+                    }
+                    lastIdx = targetIdx;
+                }
+
+                // ADD THE REAL WAYPOINT
+                finalWaypoints.push(formatCoord(wp.originalLat || wp.lat, wp.originalLng || wp.lng));
+            });
+
+            // 4. Ghost points for the FINAL leg (Last WP -> Destination)
+            const endIdx = allCoords.length - 1;
+            if (endIdx > lastIdx) {
+                const segmentLen = endIdx - lastIdx;
+                const ghostsPerLeg = 2;
+                const step = Math.floor(segmentLen / (ghostsPerLeg + 1));
+                if (step > 10) {
+                    for (let k = 1; k <= ghostsPerLeg; k++) {
+                        const idx = lastIdx + (step * k);
+                        if (idx < endIdx) {
+                            const c = allCoords[idx];
+                            finalWaypoints.push(formatCoord(c[0], c[1]));
+                        }
+                    }
                 }
             }
+        } else {
+            // Fallback: No geometry
+            finalWaypoints = realWaypoints.map(l => formatCoord(l.originalLat || l.lat, l.originalLng || l.lng));
         }
-    }
 
-    // Combine Real Waypoints + Ghost Waypoints
-    // LIMITATION: Mixing them might confuse the order if we don't insert them in the right place.
-    // If we just append ghost points, the route will ping-pong.
-    // We must NOT do ghost points if we have real waypoints unless we interleave them correctly.
-    // INTERLEAVING IS COMPLEX without knowing which segment belongs to which real waypoint leg.
-    //
-    // FALLBACK: If we have multiple real stops, "Ghosting" is too risky to break the sequence.
-    // We only use Ghosting if it's a simple A -> B route (2 locations).
-    // If > 2 locations (Multi-stop), we trust Google's routing between stops or rely on the user.
-    //
-    // However, the user request says "guarantee... system route sent to maps".
-    // Let's refine:
-    // If locations.length > 2, we just use the real waypoints. 
-    // The "Avoid Dirt" efficiency relies on the STOP points being chosen well (which optimization does).
-    // If the road BETWEEN stops is dirt, we can't easily force it without massive URL complexity.
-
-    if (locations.length > 2) {
-        // Standard Multi-stop
-        finalWaypoints = realWaypoints.map(l => formatCoord(l.originalLat || l.lat, l.originalLng || l.lng));
     } else {
-        // Simple A -> B logic (or if we figured out interleaving later).
-        // Actually, if we have just A->B, the `finalWaypoints` array is currently just ghost points (since realWaypoints is empty).
-        // So `finalWaypoints` is good to go for A->B.
+        // Standard Behavior (Just Real Stops)
+        finalWaypoints = realWaypoints.map(l => formatCoord(l.originalLat || l.lat, l.originalLng || l.lng));
     }
 
     let url = `https://www.google.com/maps/dir/?api=1&origin=${originStr}&destination=${destStr}&travelmode=driving`;

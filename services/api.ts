@@ -134,14 +134,19 @@ export const searchLocation = async (query: string): Promise<Location[]> => {
     seen.add(k);
     return true;
   });
-
   // Sort: Prioritize House Numbers if query had one
   return unique.sort((a, b) => {
-    if (!hasNumberQuery) return 0;
     const aHasNum = !!a.address.number;
     const bHasNum = !!b.address.number;
-    if (aHasNum && !bHasNum) return -1;
-    if (!aHasNum && bHasNum) return 1;
+
+    if (hasNumberQuery) {
+      if (aHasNum && !bHasNum) return -1;
+      if (!aHasNum && bHasNum) return 1;
+    } else {
+      // Prioritize places WITHOUT numbers if the query didn't have one (e.g. searching for a City)
+      if (!aHasNum && bHasNum) return -1;
+      if (aHasNum && !bHasNum) return 1;
+    }
     return 0;
   });
 };
