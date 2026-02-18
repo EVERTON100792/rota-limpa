@@ -140,7 +140,8 @@ export const getOptimizedRouteORS = async (
             // This gives (Good Order) + (Good Surface).
 
             tollCount: 0, // ORS doesn't return toll count easily in GeoJSON summary
-            tollDetails: [] // Would need Overpass for this too
+            tollDetails: [], // Would need Overpass for this too
+            totalAmount: 0 // Calculated in frontend
         };
 
     } catch (e) {

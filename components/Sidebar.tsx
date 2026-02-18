@@ -1,10 +1,28 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { getGoogleMapsUrl, openWazeLink } from '../services/NavigationService';
-import { Location, OptimizedRoute, Trip } from '../types';
+import { Location, OptimizedRoute, Trip, VehicleConfig } from '../types';
 import { searchLocation, getReverseGeocoding } from '../services/api';
 import { StorageService } from '../services/storage';
-import { MapPin, Navigation, Search, AlertTriangle, Star, Check, Trash2, Code, Calculator, Map as MapIcon, Loader2, Home, X, ExternalLink, Locate, Settings, FileText, Pencil, CheckCircle, MapPinOff, Truck, Car, Fuel, Wrench, DollarSign, ChevronDown, ChevronUp } from 'lucide-react';
+import {
+  MapPin,
+  Navigation,
+  MoreVertical,
+  Search,
+  Plus,
+  X,
+  Settings,
+  Truck,
+  DollarSign,
+  Trophy,
+  Share2,
+  ChevronDown,
+  ChevronUp,
+  Minimize2,
+  Maximize2,
+  Trash2,
+  AlertTriangle, Star, Check, Code, Calculator, Map as MapIcon, Loader2, Home, ExternalLink, Locate, FileText, Pencil, CheckCircle, MapPinOff, Car, Fuel, Wrench
+} from 'lucide-react';
 import { MAX_FREE_STOPS } from '../constants';
 import LocationItem from './LocationItem';
 
@@ -13,21 +31,21 @@ interface SidebarProps {
   locations: Location[];
   setLocations: React.Dispatch<React.SetStateAction<Location[]>>;
   isPremium: boolean;
-  onOptimize: () => void;
+  onOptimize: () => Promise<void>;
   isOptimizing: boolean;
   route: OptimizedRoute | null;
-  onUpgradeClick: () => void;
-  onShowDevCode: () => void;
+  onRemoveLocation: (id: string) => void;
+  onUpdateLocation: (loc: Location) => void;
+  onClearAll: () => void;
   onOpenSettings: () => void;
   onOpenHistory: () => void;
   onOpenHelp: () => void;
-  onStartNavigation: () => void; // Mantido para compatibilidade, mas não usado internamente
-  isNavigating: boolean;
   avoidDirt: boolean;
-  onToggleAvoidDirt: () => void;
+  setAvoidDirt: (value: boolean) => void;
   roundTrip: boolean;
   onToggleRoundTrip: () => void;
   setRoundTrip: (value: boolean) => void;
+  vehicleConfig: VehicleConfig;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({
@@ -37,58 +55,29 @@ const Sidebar: React.FC<SidebarProps> = ({
   onOptimize,
   isOptimizing,
   route,
-  onUpgradeClick,
-  onShowDevCode,
   onOpenSettings,
   onOpenHistory,
   onOpenHelp,
   avoidDirt,
-  onToggleAvoidDirt,
+  setAvoidDirt,
   roundTrip,
   onToggleRoundTrip,
   setRoundTrip,
+  vehicleConfig,
+  onRemoveLocation,
+  onUpdateLocation,
+  onClearAll
 }) => {
-  const [query, setQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Location[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [isLoadingLocation, setIsLoadingLocation] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
-  // --- Advanced Inputs State ---
-  const [vehicleType, setVehicleType] = useState<'Fiorino' | 'Van' | 'Caminhão'>('Fiorino');
-  const [fuelType, setFuelType] = useState<'Gasolina' | 'Diesel' | 'Etanol'>('Gasolina');
-  const [fuelPrice, setFuelPrice] = useState<number | ''>(5.89); // Default Gasolina
-  const [consumption, setConsumption] = useState<number | ''>(10); // Default Fiorino
-  // Maintenance removed as per request
-  const [freightPrice, setFreightPrice] = useState<number | ''>(2.500); // R$/km charged (3 decimals)
-  const [showCostInputs, setShowCostInputs] = useState(false);
+  const [showTotals, setShowTotals] = useState(true); // Toggle for footer details
 
   // Trip Finish State
   const [showFinishModal, setShowFinishModal] = useState(false);
   const [realKm, setRealKm] = useState<number | ''>(0);
-
-  // Auto-fill defaults when vehicle changes
-  useEffect(() => {
-    switch (vehicleType) {
-      case 'Fiorino':
-        setConsumption(10); // km/L
-        setFuelType('Gasolina');
-        setFuelPrice(5.89);
-        setFreightPrice(2.500);
-        break;
-      case 'Van':
-        setConsumption(8); // km/L
-        setFuelType('Diesel');
-        setFuelPrice(6.19);
-        setFreightPrice(3.500);
-        break;
-      case 'Caminhão':
-        setConsumption(4); // km/L
-        setFuelType('Diesel');
-        setFuelPrice(6.19);
-        setFreightPrice(6.000);
-        break;
-    }
-  }, [vehicleType]);
 
   // Auto-set Real KM estimate when route changes
   useEffect(() => {
@@ -104,9 +93,9 @@ const Sidebar: React.FC<SidebarProps> = ({
     if (!route) return null;
     const distanceKm = route.totalDistance / 1000;
 
-    const cons = typeof consumption === 'number' ? consumption : 1; // Prevent div by zero
-    const fPrice = typeof fuelPrice === 'number' ? fuelPrice : 0;
-    const frPrice = typeof freightPrice === 'number' ? freightPrice : 0;
+    const cons = vehicleConfig.consumption;
+    const fPrice = vehicleConfig.fuelPrice;
+    const frPrice = vehicleConfig.freightPrice;
 
     const fuelCostTotal = (distanceKm / cons) * fPrice;
 
@@ -130,11 +119,11 @@ const Sidebar: React.FC<SidebarProps> = ({
   // Debounce Search Effect
   useEffect(() => {
     const delayDebounceFn = setTimeout(async () => {
-      if (query.length > 2) {
+      if (searchQuery.length > 2) {
         setIsSearching(true);
         setShowDropdown(true);
         try {
-          const results = await searchLocation(query);
+          const results = await searchLocation(searchQuery);
           setSearchResults(results);
         } catch (e) {
           console.error(e);
@@ -148,7 +137,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     }, 600); // Wait 600ms after user stops typing
 
     return () => clearTimeout(delayDebounceFn);
-  }, [query]);
+  }, [searchQuery]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -175,8 +164,6 @@ const Sidebar: React.FC<SidebarProps> = ({
 
         if (locationData) {
           setLocations(prev => [locationData, ...prev]);
-          // Auto-enable Round Trip as per user request
-          setRoundTrip(true);
         }
         setIsLoadingLocation(false);
       },
@@ -193,16 +180,16 @@ const Sidebar: React.FC<SidebarProps> = ({
     // Premium check removed (Unlimited stops for everyone)
     setLocations([...locations, loc]);
     setSearchResults([]);
-    setQuery('');
+    setSearchQuery('');
     setShowDropdown(false);
   };
 
   const handleManualAdd = async () => {
-    if (!query) return;
+    if (!searchQuery) return;
     setIsSearching(true);
     try {
       // Geocode the full string (Street + Number)
-      const results = await searchLocation(query);
+      const results = await searchLocation(searchQuery);
       if (results && results.length > 0) {
         // Use the first result which should be the most relevant (and hopefully has the number)
         addLocation(results[0]);
@@ -239,7 +226,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   const formatDuration = (seconds: number) => {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
-    return `${hours}h ${minutes}m`;
+    return `${hours}h ${minutes} m`;
   };
 
   const formatCurrency = (val: number) => {
@@ -262,24 +249,24 @@ const Sidebar: React.FC<SidebarProps> = ({
     if (!route) return;
 
     // Calculate Final Values based on REAL KM
-    const fuelCostFinal = ((typeof realKm === 'number' ? realKm : 0) / (typeof consumption === 'number' ? consumption : 1)) * (typeof fuelPrice === 'number' ? fuelPrice : 0);
-    const grossIncomeFinal = (typeof realKm === 'number' ? realKm : 0) * (typeof freightPrice === 'number' ? freightPrice : 0);
+    const fuelCostFinal = ((typeof realKm === 'number' ? realKm : 0) / vehicleConfig.consumption) * vehicleConfig.fuelPrice;
+    const grossIncomeFinal = (typeof realKm === 'number' ? realKm : 0) * vehicleConfig.freightPrice;
     const netProfitFinal = grossIncomeFinal - fuelCostFinal;
 
     const reportText = `
-🚛 *RELATÓRIO DE VIAGEM - ${new Date().toLocaleDateString()}*
+🚛 * RELATÓRIO DE VIAGEM - ${new Date().toLocaleDateString()}*
 
-📍 *Rota:* ${locations[0].name} ➝ ${locations[locations.length - 1].name}
-🛣️ *Distância Real:* ${(typeof realKm === 'number' ? realKm : 0).toFixed(1)} km
-⛽ *Veículo:* ${vehicleType} (${fuelType})
+📍 * Rota:* ${locations[0].name} ➝ ${locations[locations.length - 1].name}
+🛣️ * Distância Real:* ${(typeof realKm === 'number' ? realKm : 0).toFixed(1)} km
+⛽ * Veículo:* ${vehicleConfig.type} (${vehicleConfig.fuelType})
 
-💰 *RESUMO FINANCEIRO:*
-💵 *Valor a Receber:* R$ ${grossIncomeFinal.toFixed(2)}
-⛽ *Custo Combustível:* R$ ${fuelCostFinal.toFixed(2)}
-✅ *Lucro Líquido:* R$ ${netProfitFinal.toFixed(2)}
+💰 * RESUMO FINANCEIRO:*
+💵 * Valor a Receber:* R$ ${grossIncomeFinal.toFixed(2)}
+⛽ * Custo Combustível:* R$ ${fuelCostFinal.toFixed(2)}
+✅ * Lucro Líquido:* R$ ${netProfitFinal.toFixed(2)}
 
-*Gerado por RotaLimpa*
-    `.trim();
+* Gerado por RotaLimpa *
+  `.trim();
 
     navigator.clipboard.writeText(reportText);
     alert("Relatório copiado! Cole no WhatsApp.");
@@ -287,18 +274,18 @@ const Sidebar: React.FC<SidebarProps> = ({
 
   const confirmFinishTrip = () => {
     // Save to History using Real Values
-    const fuelCostFinal = ((typeof realKm === 'number' ? realKm : 0) / (typeof consumption === 'number' ? consumption : 1)) * (typeof fuelPrice === 'number' ? fuelPrice : 0);
-    const grossIncomeFinal = (typeof realKm === 'number' ? realKm : 0) * (typeof freightPrice === 'number' ? freightPrice : 0);
+    const fuelCostFinal = ((typeof realKm === 'number' ? realKm : 0) / vehicleConfig.consumption) * vehicleConfig.fuelPrice;
+    const grossIncomeFinal = (typeof realKm === 'number' ? realKm : 0) * vehicleConfig.freightPrice;
 
     const newTrip: Trip = {
       id: crypto.randomUUID(),
       date: new Date().toISOString(),
       totalDistance: (typeof realKm === 'number' ? realKm : 0) * 1000, // Convert back to meters for storage consistency
       totalDuration: route!.totalDuration,
-      costPerKm: (typeof freightPrice === 'number' ? freightPrice : 0),
+      costPerKm: vehicleConfig.freightPrice,
       totalAmount: grossIncomeFinal,
       locations: locations,
-      routeSummary: `${locations[0].name} -> ${locations[locations.length - 1].name}`
+      routeSummary: `${locations[0].name} -> ${locations[locations.length - 1].name} `
     };
 
     StorageService.saveTrip(newTrip);
@@ -406,21 +393,21 @@ const Sidebar: React.FC<SidebarProps> = ({
 
             <button
               onClick={setRoundTrip ? () => setRoundTrip(!roundTrip) : undefined}
-              className={`flex flex-col items-center justify-center p-2 rounded-xl border-2 transition-all ${roundTrip
+              className={`flex flex - col items - center justify - center p - 2 rounded - xl border - 2 transition - all ${roundTrip
                 ? 'border-emerald-600 bg-emerald-50 text-emerald-700'
                 : 'border-gray-200 text-gray-500 hover:border-emerald-300'
-                }`}
+                } `}
             >
               <span className="text-xs font-bold">Ida e Volta</span>
               <span className="text-[10px]">{roundTrip ? 'ATIVADO' : 'DESATIVADO'}</span>
             </button>
 
             <button
-              onClick={onToggleAvoidDirt}
-              className={`flex flex-col items-center justify-center p-2 rounded-xl border-2 transition-all ${avoidDirt
+              onClick={() => setAvoidDirt(!avoidDirt)}
+              className={`flex flex - col items - center justify - center p - 2 rounded - xl border - 2 transition - all ${avoidDirt
                 ? 'border-amber-600 bg-amber-50 text-amber-700'
                 : 'border-gray-200 text-gray-500 hover:border-amber-300'
-                }`}
+                } `}
             >
               <span className="text-xs font-bold">Evitar Terra</span>
               <span className="text-[10px]">{avoidDirt ? 'ATIVADO' : 'DESATIVADO'}</span>
@@ -487,8 +474,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 group-focus-within:text-emerald-500 transition-colors" size={18} />
                 <input
                   type="text"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Buscar endereço (Rua, Número, Cidade)"
                   className="w-full pl-10 pr-10 py-3 bg-white border border-gray-200 rounded-xl shadow-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all text-sm font-medium"
                 />
@@ -530,7 +517,7 @@ const Sidebar: React.FC<SidebarProps> = ({
               {/* Premium Badge */}
               {!isPremium && (
                 <div
-                  onClick={onUpgradeClick}
+                  onClick={() => { /* onUpgradeClick removed */ }}
                   className="flex items-center justify-between p-3 bg-gradient-to-r from-gray-900 to-gray-800 rounded-xl text-white shadow-md cursor-pointer hover:shadow-lg transition-all group"
                 >
                   <div className="flex items-center gap-2">
@@ -565,126 +552,63 @@ const Sidebar: React.FC<SidebarProps> = ({
                 )}
               </div>
 
-              {/* --- Advanced Inputs Section --- */}
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                <button
-                  onClick={() => setShowCostInputs(!showCostInputs)}
-                  className="w-full flex justify-between items-center p-3 bg-gray-50 hover:bg-gray-100 transition-colors"
-                >
-                  <div className="flex items-center gap-2 text-sm font-bold text-gray-700">
-                    <Truck size={16} className="text-emerald-600" />
-                    Veículo & Custos
+              {/* --- Route Totals Card --- */}
+              {route && (
+                <div className="bg-emerald-50 rounded-xl border border-emerald-100 p-4 space-y-3 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                  <div className="flex justify-between items-center mb-1">
+                    <h3 className="font-bold text-gray-800 flex items-center gap-2">
+                      <Trophy size={16} className="text-emerald-600" />
+                      Resumo da Rota
+                    </h3>
+                    <button
+                      onClick={onOpenSettings}
+                      className="text-xs text-emerald-600 hover:text-emerald-800 font-semibold flex items-center gap-1 bg-white px-2 py-1 rounded-md border border-emerald-200 shadow-sm"
+                    >
+                      <Truck size={12} /> Config. Veículo
+                    </button>
                   </div>
-                  {showCostInputs ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
-                </button>
 
-                {showCostInputs && (
-                  <div className="p-3 space-y-4 animate-in slide-in-from-top-2 duration-200">
-                    {/* Vehicle Type */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-gray-500 uppercase">Veículo</label>
-                        <div className="relative">
-                          <select
-                            value={vehicleType}
-                            onChange={(e) => setVehicleType(e.target.value as any)}
-                            className="w-full p-2 pl-8 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none appearance-none font-medium"
-                          >
-                            <option value="Fiorino">Fiorino</option>
-                            <option value="Van">Van</option>
-                            <option value="Caminhão">Caminhão</option>
-                          </select>
-                          <Truck size={14} className="absolute left-2.5 top-2.5 text-gray-400" />
-                        </div>
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-gray-500 uppercase">Combustível</label>
-                        <div className="relative">
-                          <select
-                            value={fuelType}
-                            onChange={(e) => setFuelType(e.target.value as any)}
-                            className="w-full p-2 pl-8 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none appearance-none font-medium"
-                          >
-                            <option value="Gasolina">Gasolina</option>
-                            <option value="Diesel">Diesel</option>
-                            <option value="Etanol">Etanol</option>
-                          </select>
-                          <Fuel size={14} className="absolute left-2.5 top-2.5 text-gray-400" />
-                        </div>
-                      </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-white p-2.5 rounded-lg border border-emerald-100 shadow-sm">
+                      <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Distância</p>
+                      <p className="text-lg font-bold text-gray-800">{(route.totalDistance / 1000).toFixed(1)} <span className="text-xs text-gray-400">km</span></p>
                     </div>
-
-                    {/* Costs Grid */}
-                    <div className="grid grid-cols-2 gap-3">
-                      {/* Consumption */}
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-gray-500 uppercase">Consumo (km/L)</label>
-                        <div className="relative">
-                          <input
-                            type="number"
-                            step="0.1"
-                            value={consumption}
-                            onChange={(e) => setConsumption(parseFloat(e.target.value) || '')}
-                            className="w-full p-2 pl-7 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
-                          />
-                          <div className="absolute left-2.5 top-2.5 text-xs text-gray-400 font-bold">km</div>
-                        </div>
-                      </div>
-
-                      {/* Fuel Price */}
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-gray-500 uppercase">Preço (R$/L)</label>
-                        <div className="relative">
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={fuelPrice}
-                            onChange={(e) => setFuelPrice(parseFloat(e.target.value) || '')}
-                            className="w-full p-2 pl-7 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
-                          />
-                          <div className="absolute left-2.5 top-2.5 text-xs text-gray-400 font-bold">R$</div>
-                        </div>
-                      </div>
-
-                      {/* Freight Price (Per KM) */}
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-gray-500 uppercase">Valor Frete (R$/km)</label>
-                        <div className="relative">
-                          <input
-                            type="number"
-                            step="0.001"
-                            value={freightPrice}
-                            onChange={(e) => {
-                              const val = parseFloat(e.target.value);
-                              setFreightPrice(isNaN(val) ? '' : val);
-                            }}
-                            className="w-full p-2 pl-7 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
-                          />
-                          <div className="absolute left-2.5 top-2.5 text-xs text-gray-400 font-bold">R$</div>
-                        </div>
-                      </div>
-
-                      {/* Total Freight (Calculated/Manual) - Only show if route exists for context? Or always? */}
-                      {/* Let's show it always, but it might be 0 if no route */}
-                      {/* Total Freight (Calculated - Read Only) */}
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-emerald-600 uppercase">Valor a Receber</label>
-                        <div className="relative">
-                          <input
-                            type="text"
-                            readOnly
-                            value={route ? formatCurrency((route.totalDistance / 1000) * (typeof freightPrice === 'number' ? freightPrice : 0)) : 'R$ 0,00'}
-                            className="w-full p-2 text-sm font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg outline-none cursor-not-allowed"
-                          />
-                        </div>
-                      </div>
+                    <div className="bg-white p-2.5 rounded-lg border border-emerald-100 shadow-sm">
+                      <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Tempo</p>
+                      <p className="text-lg font-bold text-gray-800">{formatDuration(route.totalDuration)}</p>
                     </div>
                   </div>
-                )}
-              </div>
 
-              {/* --- End Advanced Inputs --- */}
+                  {showTotals && (
+                    <div className="space-y-2 pt-2 border-t border-emerald-100">
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-gray-600">Custo Combustível:</span>
+                        <span className="font-bold text-gray-800">
+                          R$ {((route.totalDistance / 1000 / vehicleConfig.consumption) * vehicleConfig.fuelPrice).toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-gray-600">Valor Frete:</span>
+                        <span className="font-bold text-emerald-600">
+                          R$ {(route.totalDistance / 1000 * vehicleConfig.freightPrice).toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center text-sm pt-2 border-t border-dashed border-emerald-200">
+                        <span className="text-gray-800 font-bold">Lucro Estimado:</span>
+                        <span className="font-bold text-emerald-700 text-base">
+                          R$ {((route.totalDistance / 1000 * vehicleConfig.freightPrice) - ((route.totalDistance / 1000 / vehicleConfig.consumption) * vehicleConfig.fuelPrice)).toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                  <button
+                    onClick={() => setShowTotals(!showTotals)}
+                    className="w-full text-center text-xs text-emerald-500 hover:text-emerald-700 font-medium pt-1"
+                  >
+                    {showTotals ? "Ocultar Detalhes Financeiros" : "Ver Detalhes Financeiros"}
+                  </button>
+                </div>
+              )}
               {locations.length === 0 ? (
                 <div className="text-center py-8 bg-gray-50 rounded-xl border border-dashed border-gray-200">
                   <MapPinOff className="mx-auto text-gray-300 mb-2" size={32} />
@@ -743,9 +667,9 @@ const Sidebar: React.FC<SidebarProps> = ({
               {/* Live Calculation Preview */}
               {(() => {
                 const rKm = typeof realKm === 'number' ? realKm : 0;
-                const cons = typeof consumption === 'number' ? consumption : 1;
-                const fPrice = typeof fuelPrice === 'number' ? fuelPrice : 0;
-                const frPrice = typeof freightPrice === 'number' ? freightPrice : 0;
+                const cons = vehicleConfig.consumption || 1;
+                const fPrice = vehicleConfig.fuelPrice || 0;
+                const frPrice = vehicleConfig.freightPrice || 0;
                 const fuelCost = (rKm / cons) * fPrice;
                 const income = rKm * frPrice;
                 const profit = income - fuelCost;

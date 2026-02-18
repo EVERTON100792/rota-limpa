@@ -6,7 +6,7 @@ import PremiumModal from './components/PremiumModal';
 import SettingsModal from './components/SettingsModal';
 import TripHistoryModal from './components/TripHistoryModal';
 import HelpModal from './components/HelpModal';
-import { Location, OptimizedRoute, Trip } from './types';
+import { Location, OptimizedRoute, Trip, VehicleConfig } from './types';
 import { getOptimizedRoute } from './services/api';
 import { Menu, X } from 'lucide-react';
 import OptimizationOverlay from './components/OptimizationOverlay';
@@ -18,6 +18,15 @@ const App: React.FC = () => {
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [avoidDirt, setAvoidDirt] = useState(false);
   const [roundTrip, setRoundTrip] = useState(false);
+
+  // Lifted Vehicle State
+  const [vehicleConfig, setVehicleConfig] = useState<VehicleConfig>({
+    type: 'Fiorino',
+    fuelType: 'Gasolina',
+    consumption: 10,
+    fuelPrice: 5.89,
+    freightPrice: 2.50
+  });
 
   // Estado inicial da sidebar: aberta em desktop, fechada em mobile
   // Usamos uma função lazy para inicializar o estado apenas uma vez
@@ -156,6 +165,7 @@ const App: React.FC = () => {
           roundTrip={roundTrip}
           onToggleRoundTrip={() => setRoundTrip(prev => !prev)}
           setRoundTrip={setRoundTrip} // Expose setter for auto-enable
+          vehicleConfig={vehicleConfig} // Pass Config
         />
       </div>
 
@@ -211,6 +221,8 @@ const App: React.FC = () => {
         onClose={() => setShowSettings(false)}
         isPremium={isPremium}
         onUpgrade={() => setShowPremiumModal(true)}
+        vehicleConfig={vehicleConfig}
+        setVehicleConfig={setVehicleConfig}
       />
 
       <TripHistoryModal

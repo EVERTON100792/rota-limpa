@@ -87,3 +87,11 @@ export interface OSRMTripResponse {
   waypoints: OSRMWaypoint[];
   trips: OSRMRoute[];
 }
+
+export interface VehicleConfig {
+  type: 'Fiorino' | 'Van' | 'Caminhão';
+  fuelType: 'Gasolina' | 'Diesel' | 'Etanol';
+  fuelPrice: number;
+  consumption: number; // km/L
+  freightPrice: number; // R$/km
+}
